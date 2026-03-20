@@ -9,11 +9,11 @@ interface ProgressBarProps {
 
 export default function ProgressBar({
   currentStep,
-  totalSteps = 8,
+  totalSteps = 7,
 }: ProgressBarProps) {
   return (
     <div className="w-full">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
         {Array.from({ length: totalSteps }, (_, index) => {
           const stepNumber = index + 1;
           const isCompleted = stepNumber < currentStep;
@@ -23,7 +23,7 @@ export default function ProgressBar({
           return (
             <motion.div
               key={index}
-              className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden"
+              className="h-[5px] flex-1 rounded-full bg-gray-200 overflow-hidden"
             >
               <motion.div
                 className="h-full bg-orange-500 rounded-full"
@@ -40,17 +40,6 @@ export default function ProgressBar({
             </motion.div>
           );
         })}
-      </div>
-      <div className="flex items-center justify-between mt-2">
-        <motion.span
-          key={currentStep}
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-xs font-medium text-slate-400"
-        >
-          Step {currentStep} of {totalSteps}
-        </motion.span>
       </div>
     </div>
   );

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import LottieAnimation from '../components/animations/LottieAnimation';
+import { taskComplete } from '../components/animations/lottieData';
 
 interface Task {
   id: string;
@@ -41,6 +43,7 @@ export default function DashboardPage() {
   const [baseProgress] = useState(15);
   const [showTasks, setShowTasks] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
+  const [showCompletionAnimation, setShowCompletionAnimation] = useState(false);
   const bodyControls = useAnimation();
 
   const completedCount = tasks.filter((t) => t.completed).length;
@@ -71,6 +74,12 @@ export default function DashboardPage() {
 
     if (!wasCompleted) {
       setJustCompleted(true);
+      setShowCompletionAnimation(true);
+
+      // Hide animation after it completes
+      setTimeout(() => {
+        setShowCompletionAnimation(false);
+      }, 750);
     }
   };
 
@@ -309,6 +318,27 @@ export default function DashboardPage() {
               <div className="h-8" />
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Task Completion Animation Overlay */}
+      <AnimatePresence>
+        {showCompletionAnimation && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.2 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+          >
+            <LottieAnimation
+              animationData={taskComplete}
+              width={120}
+              height={120}
+              loop={false}
+              autoplay
+            />
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

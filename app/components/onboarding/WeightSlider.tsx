@@ -27,13 +27,13 @@ export default function WeightSlider({
   );
 
   return (
-    <div className="w-full">
+    <div className="w-full pt-4">
       {/* Large Number Display */}
       <div className="text-center mb-12">
-        <span className="text-7xl font-bold text-slate-900 tabular-nums">
+        <span className="text-6xl font-bold text-gray-900 tabular-nums">
           {value}
         </span>
-        <span className="text-2xl font-medium text-slate-400 ml-2">
+        <span className="text-2xl font-medium text-gray-400 ml-2">
           {unit}
         </span>
       </div>
@@ -41,7 +41,7 @@ export default function WeightSlider({
       {/* Single Slider */}
       <div className="relative h-12">
         {/* Visual Track */}
-        <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2 bg-slate-200 rounded-full">
+        <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2 bg-gray-200 rounded-full">
           <div
             className="h-full bg-orange-500 rounded-full"
             style={{ width: `${percentage}%` }}
@@ -53,7 +53,7 @@ export default function WeightSlider({
           className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
           style={{ left: `${percentage}%` }}
         >
-          <div className="w-6 h-6 -ml-3 rounded-full bg-orange-500 shadow-lg shadow-orange-300/50 flex items-center justify-center">
+          <div className="w-6 h-6 -ml-3 rounded-full bg-orange-500 flex items-center justify-center">
             <div className="w-2 h-2 bg-white rounded-full" />
           </div>
         </div>
@@ -72,9 +72,9 @@ export default function WeightSlider({
       </div>
 
       {/* Min/Max Labels */}
-      <div className="flex justify-between mt-3">
-        <span className="text-sm text-slate-400">{min} {unit}</span>
-        <span className="text-sm text-slate-400">{max} {unit}</span>
+      <div className="flex justify-between mt-4">
+        <span className="text-sm text-gray-400">{min} {unit}</span>
+        <span className="text-sm text-gray-400">{max} {unit}</span>
       </div>
     </div>
   );

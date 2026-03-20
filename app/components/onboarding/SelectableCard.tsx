@@ -1,11 +1,14 @@
 'use client';
 
+import { motion } from 'framer-motion';
+
 interface SelectableCardProps {
   id: string;
-  emoji: string;
+  emoji?: string;
   title: string;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  disabled?: boolean;
 }
 
 export default function SelectableCard({
@@ -14,71 +17,58 @@ export default function SelectableCard({
   title,
   isSelected,
   onSelect,
+  disabled = false,
 }: SelectableCardProps) {
+  const handleClick = () => {
+    if (disabled) return;
+    onSelect(id);
+  };
+
   return (
-    <button
+    <motion.button
       type="button"
-      onClick={() => onSelect(id)}
+      onClick={handleClick}
+      disabled={disabled}
+      whileTap={{ scale: 0.98 }}
       className={`
-        relative w-full px-4 py-4 rounded-xl text-left
-        bg-white border transition-all duration-200 ease-out
-        active:scale-[0.97] active:shadow-none
-        ${
-          isSelected
-            ? 'border-orange-500 bg-orange-50 shadow-md shadow-orange-100'
-            : 'border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300'
-        }
+        relative w-full px-6 py-5 rounded-[20px] text-left overflow-hidden
+        min-h-[68px]
+        ${disabled ? 'pointer-events-none' : ''}
+        ${isSelected ? '' : 'bg-gray-100 hover:bg-gray-150 active:bg-gray-200'}
       `}
     >
-      <div className="flex items-center gap-4">
-        {/* Icon container */}
-        <div
-          className={`
-            flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center
-            transition-all duration-200 ease-out
-            ${isSelected ? 'bg-orange-100 scale-105' : 'bg-slate-50'}
-          `}
-        >
-          <span
-            className={`
-              text-2xl transition-transform duration-200
-              ${isSelected ? 'scale-110' : ''}
-            `}
-            role="img"
-            aria-hidden="true"
-          >
-            {emoji}
-          </span>
-        </div>
+      {/* Left-to-right fill animation layer */}
+      <motion.div
+        initial={false}
+        animate={{
+          width: isSelected ? '100%' : '0%',
+        }}
+        transition={{
+          duration: 0.3,
+          ease: [0.4, 0, 0.2, 1],
+        }}
+        className="absolute left-0 top-0 h-full bg-orange-500"
+        style={{ zIndex: 0 }}
+      />
 
+      {/* Content layer */}
+      <div className="relative z-10 flex items-center justify-between gap-4">
         {/* Title */}
         <span
-          className={`
-            flex-1 text-sm font-medium leading-tight
-            transition-colors duration-200
-            ${isSelected ? 'text-slate-900' : 'text-slate-700'}
-          `}
+          className={`flex-1 text-[17px] font-semibold leading-snug transition-colors duration-300 ${
+            isSelected ? 'text-white' : 'text-gray-900'
+          }`}
         >
           {title}
         </span>
 
-        {/* Checkbox indicator */}
-        <div
-          className={`
-            flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center
-            transition-all duration-200 ease-out
-            ${
-              isSelected
-                ? 'bg-orange-500 border-orange-500 scale-110'
-                : 'border-slate-300 bg-white'
-            }
-          `}
-        >
-          <svg
-            className={`
-              w-3 h-3 text-white transition-all duration-200
-              ${isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}
-            `}
+        {/* Checkmark - only show when selected */}
+        {isSelected && (
+          <motion.svg
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.2, delay: 0.15, ease: [0.4, 0, 0.2, 1] }}
+            className="flex-shrink-0 w-6 h-6 text-white"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -89,9 +79,9 @@ export default function SelectableCard({
               strokeLinejoin="round"
               d="M5 13l4 4L19 7"
             />
-          </svg>
-        </div>
+          </motion.svg>
+        )}
       </div>
-    </button>
+    </motion.button>
   );
 }

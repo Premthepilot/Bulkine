@@ -1,346 +1,325 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import LottieAnimation from '../components/animations/LottieAnimation';
-import { taskComplete } from '../components/animations/lottieData';
+import { useState, useEffect, useRef } from 'react';
+import { motion, useAnimation } from 'framer-motion';
+import Image from 'next/image';
 
 interface Task {
   id: string;
   title: string;
-  emoji: string;
+  kcal: number;
+  description: string;
   completed: boolean;
 }
 
+
 const INITIAL_TASKS: Task[] = [
-  { id: 'shake', title: 'Drink banana shake', emoji: '🍌', completed: false },
-  { id: 'meals', title: 'Eat 4 meals', emoji: '🍽️', completed: false },
-  { id: 'workout', title: 'Complete workout', emoji: '💪', completed: false },
-  { id: 'water', title: 'Drink 3L water', emoji: '💧', completed: false },
+  {
+    id: 'shake',
+    title: 'Drink protein shake',
+    kcal: 400,
+    description: 'Post-workout',
+    completed: true,
+  },
+  {
+    id: 'lunch',
+    title: 'Eat lunch',
+    kcal: 600,
+    description: 'High carb focus',
+    completed: false,
+  },
+  {
+    id: 'snack',
+    title: 'Snack',
+    kcal: 300,
+    description: 'Healthy boost',
+    completed: false,
+  },
 ];
 
-const MOTIVATIONAL_TEXTS = [
-  { threshold: 0, text: "Let's start growing" },
-  { threshold: 25, text: "You're building momentum" },
-  { threshold: 50, text: "Halfway there!" },
-  { threshold: 75, text: "You're getting stronger" },
-  { threshold: 100, text: "Unstoppable!" },
-];
-
-function getMotivationalText(progress: number) {
-  for (let i = MOTIVATIONAL_TEXTS.length - 1; i >= 0; i--) {
-    if (progress >= MOTIVATIONAL_TEXTS[i].threshold) {
-      return MOTIVATIONAL_TEXTS[i].text;
-    }
-  }
-  return MOTIVATIONAL_TEXTS[0].text;
-}
+const BASE_CALORIES = 800;
 
 export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
-  const [calories, setCalories] = useState(1800);
-  const [streak, setStreak] = useState(2);
-  const [baseProgress] = useState(15);
-  const [showTasks, setShowTasks] = useState(false);
-  const [justCompleted, setJustCompleted] = useState(false);
-  const [showCompletionAnimation, setShowCompletionAnimation] = useState(false);
-  const bodyControls = useAnimation();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const baseGoal = 2500;
+  const surplus = 300;
+  const totalTarget = baseGoal + surplus;
 
-  const completedCount = tasks.filter((t) => t.completed).length;
-  const totalTasks = tasks.length;
-  const targetCalories = 2800;
+  const mascotControls = useAnimation();
+  const prevCaloriesRef = useRef<number>(0);
 
-  const bodyProgress = Math.min(baseProgress + completedCount * 20, 100);
-  const motivationalText = getMotivationalText(bodyProgress);
+  const caloriesConsumed = BASE_CALORIES + tasks
+    .filter((t) => t.completed)
+    .reduce((sum, t) => sum + t.kcal, 0);
 
-  // Pulse animation on task completion
+  const progress = Math.min((caloriesConsumed / totalTarget) * 100, 100);
+
   useEffect(() => {
-    if (justCompleted) {
-      bodyControls.start({
-        scale: [1, 1.05, 1],
-        transition: { duration: 0.6, ease: 'easeOut' },
+    if (caloriesConsumed > prevCaloriesRef.current) {
+      mascotControls.start({
+        scale: [1, 1.08, 1],
+        transition: { duration: 0.4, ease: 'easeOut' },
       });
-      setJustCompleted(false);
     }
-  }, [justCompleted, bodyControls]);
+    prevCaloriesRef.current = caloriesConsumed;
+  }, [caloriesConsumed, mascotControls]);
 
   const toggleTask = (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId);
-    const wasCompleted = task?.completed;
-
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t))
+      prev.map((t) =>
+        t.id === taskId ? { ...t, completed: !t.completed } : t
+      )
     );
-
-    if (!wasCompleted) {
-      setJustCompleted(true);
-      setShowCompletionAnimation(true);
-
-      // Hide animation after it completes
-      setTimeout(() => {
-        setShowCompletionAnimation(false);
-      }, 750);
-    }
   };
 
+  const getMotivationText = () => {
+    const percentage = (caloriesConsumed / totalTarget) * 100;
+    if (percentage >= 100) return { main: 'Amazing work today!', highlight: "You've crushed your goal!" };
+    if (percentage >= 75) return { main: 'Almost there!', highlight: 'Keep pushing!' };
+    if (percentage >= 50) return { main: 'Halfway there!', highlight: "You're doing great!" };
+    return { main: 'Your capy buddy is ready for a big meal.', highlight: "Let's fuel up together!" };
+  };
+
+  const motivation = getMotivationText();
+
   return (
-    <div className="min-h-screen bg-[#FAFBFC] flex flex-col relative overflow-hidden">
-      {/* Ambient background glow */}
-      <div
-        className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-orange-400/10 blur-[150px] pointer-events-none"
-        style={{ opacity: 0.4 + (bodyProgress / 100) * 0.6 }}
-      />
-
-      {/* Top Section - Minimal Stats */}
-      <header className="relative z-10 px-6 pt-14 pb-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-slate-500">
-            <span className="font-medium text-slate-700">{calories}</span>
-            <span className="text-slate-400"> / {targetCalories} kcal</span>
-          </p>
-          <div className="flex items-center gap-1.5">
-            <span className="text-base">🔥</span>
-            <span className="text-sm font-medium text-slate-700">{streak} day streak</span>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="w-full max-w-sm min-h-screen bg-[#F8F9FA] flex flex-col overflow-y-auto">
+        {/* Header */}
+        <header className="px-6 pt-8 pb-4 flex items-center justify-between">
+          <div className="w-14 h-14 rounded-full bg-[#D4A88C] overflow-hidden">
+            <div className="w-full h-full bg-gradient-to-br from-[#E5C4A8] to-[#C4947C]" />
           </div>
-        </div>
-      </header>
 
-      {/* Center Hero Section */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6">
-        {/* Large Progress Number */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6 }}
-          className="text-center"
-        >
-          <div className="relative">
-            <span className="text-8xl font-bold text-slate-900 tabular-nums tracking-tight">
-              {Math.round(bodyProgress)}
-            </span>
-            <span className="text-4xl font-semibold text-slate-300 ml-1">%</span>
-          </div>
-        </motion.div>
+          <h1 className="text-2xl font-bold text-orange-600 tracking-tight">
+            BULKINE
+          </h1>
 
-        {/* Body Visual */}
-        <motion.div
-          animate={bodyControls}
-          className="relative my-8"
-        >
-          <div className="relative w-28 h-44">
-            {/* Empty silhouette */}
+          <button className="w-10 h-10 flex items-center justify-center text-gray-500">
             <svg
-              viewBox="0 0 100 180"
-              className="absolute inset-0 w-full h-full"
+              className="w-7 h-7"
               fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
             >
               <path
-                d="M50 0C58 0 65 7 65 16C65 25 58 32 50 32C42 32 35 25 35 16C35 7 42 0 50 0Z
-                   M30 40H70C75 40 80 45 80 52V90C80 95 77 98 73 98H70V130C70 140 65 145 58 145H56V175C56 178 53 180 50 180C47 180 44 178 44 175V145H42C35 145 30 140 30 130V98H27C23 98 20 95 20 90V52C20 45 25 40 30 40Z"
-                fill="#E8ECF0"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
+          </button>
+        </header>
 
-            {/* Filled silhouette */}
-            <motion.div
-              className="absolute inset-0 w-full h-full"
-              initial={{ clipPath: 'inset(100% 0 0 0)' }}
-              animate={{ clipPath: `inset(${100 - bodyProgress}% 0 0 0)` }}
-              transition={{ duration: 1.2, ease: [0.4, 0, 0.2, 1] }}
+        {/* Calorie Display */}
+        <div className="px-6 pb-6 text-center">
+          <div className="flex items-baseline justify-center gap-1">
+            <motion.span
+              key={caloriesConsumed}
+              initial={{ scale: 1.1, opacity: 0.7 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="text-6xl font-bold text-gray-900 tabular-nums"
             >
-              <svg
-                viewBox="0 0 100 180"
-                className="w-full h-full"
-                fill="none"
-              >
-                <defs>
-                  <linearGradient id="fillGradient" x1="0%" y1="100%" x2="0%" y2="0%">
-                    <stop offset="0%" stopColor="#EA580C" />
-                    <stop offset="100%" stopColor="#FB923C" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M50 0C58 0 65 7 65 16C65 25 58 32 50 32C42 32 35 25 35 16C35 7 42 0 50 0Z
-                     M30 40H70C75 40 80 45 80 52V90C80 95 77 98 73 98H70V130C70 140 65 145 58 145H56V175C56 178 53 180 50 180C47 180 44 178 44 175V145H42C35 145 30 140 30 130V98H27C23 98 20 95 20 90V52C20 45 25 40 30 40Z"
-                  fill="url(#fillGradient)"
-                />
-              </svg>
-            </motion.div>
+              {caloriesConsumed}
+            </motion.span>
+            <span className="text-3xl text-gray-400 font-normal">
+              /{totalTarget}
+            </span>
           </div>
-        </motion.div>
+          <p className="text-orange-600 font-bold text-sm tracking-wide mt-1">
+            KCAL CONSUMED
+          </p>
 
-        {/* Motivational Text */}
-        <motion.p
-          key={motivationalText}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="text-lg text-slate-600 font-medium"
-        >
-          {motivationalText}
-        </motion.p>
-
-        {/* Task Progress Dots */}
-        <div className="flex items-center gap-2 mt-6">
-          {tasks.map((task) => (
+          {/* Progress Bar */}
+          <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
             <motion.div
-              key={task.id}
-              initial={{ scale: 0.8 }}
-              animate={{
-                scale: task.completed ? 1 : 0.8,
-                backgroundColor: task.completed ? '#F97316' : '#E2E8F0'
-              }}
-              className="w-2 h-2 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+              className="h-full bg-orange-500 rounded-full"
             />
-          ))}
+          </div>
+
+          {/* Context Text */}
+          <p className="text-xs text-gray-500 mt-2">
+            Includes +{surplus} kcal surplus for muscle gain
+          </p>
         </div>
-        <p className="text-xs text-slate-400 mt-2">
-          {completedCount}/{totalTasks} tasks today
-        </p>
-      </main>
 
-      {/* Bottom Section - CTA */}
-      <footer className="relative z-10 px-6 pb-10 pt-4">
-        <motion.button
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowTasks(true)}
-          className="w-full py-4 bg-slate-900 text-white font-semibold rounded-2xl shadow-lg shadow-slate-900/20 active:shadow-md transition-shadow"
-        >
-          {completedCount === 0 ? "Start today's tasks" : completedCount === totalTasks ? 'All done! 🎉' : 'Continue tasks'}
-        </motion.button>
-      </footer>
-
-      {/* Tasks Bottom Sheet */}
-      <AnimatePresence>
-        {showTasks && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowTasks(false)}
-              className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
-            />
-
-            {/* Sheet */}
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl z-50 max-h-[85vh] overflow-hidden"
-            >
-              {/* Handle */}
-              <div className="flex justify-center pt-3 pb-2">
-                <div className="w-10 h-1 bg-slate-200 rounded-full" />
-              </div>
-
-              {/* Header */}
-              <div className="px-6 pb-4 pt-2 border-b border-slate-100">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-900">Today&apos;s Tasks</h2>
-                  <button
-                    onClick={() => setShowTasks(false)}
-                    className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                <p className="text-sm text-slate-500 mt-1">
-                  {completedCount} of {totalTasks} completed
-                </p>
-              </div>
-
-              {/* Tasks List */}
-              <div className="px-6 py-4 space-y-3 overflow-y-auto max-h-[60vh]">
-                {tasks.map((task, index) => (
-                  <motion.button
-                    key={task.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    onClick={() => toggleTask(task.id)}
-                    whileTap={{ scale: 0.98 }}
-                    className={`
-                      w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-200
-                      ${task.completed ? 'bg-orange-50' : 'bg-slate-50'}
-                    `}
-                  >
-                    {/* Checkbox */}
-                    <div
-                      className={`
-                        w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200
-                        ${task.completed ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}
-                      `}
-                    >
-                      {task.completed && (
-                        <motion.svg
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="w-3.5 h-3.5 text-white"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={3}
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </motion.svg>
-                      )}
-                    </div>
-
-                    {/* Emoji */}
-                    <span className="text-2xl">{task.emoji}</span>
-
-                    {/* Title */}
-                    <span
-                      className={`
-                        flex-1 text-left font-medium transition-colors
-                        ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700'}
-                      `}
-                    >
-                      {task.title}
-                    </span>
-
-                    {/* Done badge */}
-                    {task.completed && (
-                      <span className="text-xs font-semibold text-orange-500 bg-orange-100 px-2.5 py-1 rounded-full">
-                        Done
-                      </span>
-                    )}
-                  </motion.button>
-                ))}
-              </div>
-
-              {/* Bottom padding for safe area */}
-              <div className="h-8" />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Task Completion Animation Overlay */}
-      <AnimatePresence>
-        {showCompletionAnimation && (
+        {/* Mascot Section */}
+        <div className="px-6 pb-4 flex justify-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.2 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+            animate={mascotControls}
+            className="relative w-44 h-44"
           >
-            <LottieAnimation
-              animationData={taskComplete}
-              width={120}
-              height={120}
-              loop={false}
-              autoplay
+            <Image
+              src="/mascot/capy-workout.png"
+              alt="Capybara workout mascot"
+              fill
+              className="object-contain"
+              priority
             />
           </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+
+        {/* Motivation Text */}
+        <div className="px-6 pb-6 text-center">
+          <motion.p
+            key={motivation.main}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="text-lg font-bold text-gray-900 leading-tight"
+          >
+            {motivation.main}{' '}
+            <span className="text-orange-600">{motivation.highlight}</span>
+          </motion.p>
+        </div>
+
+        {/* Calorie Remaining */}
+        <div className="px-6 pb-6 text-center">
+          <p className="text-base text-gray-600">
+            You need{' '}
+            <motion.span
+              key={caloriesConsumed}
+              initial={{ scale: 1.05 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="font-bold text-orange-600"
+            >
+              {Math.max(0, totalTarget - caloriesConsumed)} kcal
+            </motion.span>
+            {' '}more today
+          </p>
+        </div>
+
+        {/* Daily Momentum Section */}
+        <div className="px-6 pb-6">
+          <h2 className="text-xs font-bold text-gray-400 tracking-widest mb-3">
+            DAILY MOMENTUM
+          </h2>
+
+          <div className="space-y-3">
+            {tasks.map((task) => (
+              <motion.button
+                key={task.id}
+                onClick={() => toggleTask(task.id)}
+                whileTap={{ scale: 0.98 }}
+                className={`
+                  w-full flex items-center gap-4 p-4 bg-white rounded-2xl transition-all
+                  ${task.completed ? 'opacity-70' : 'opacity-100'}
+                `}
+              >
+                {/* Checkbox */}
+                <motion.div
+                  initial={false}
+                  animate={{
+                    backgroundColor: task.completed ? '#ea580c' : '#ffffff',
+                    borderColor: task.completed ? '#ea580c' : '#d1d5db',
+                  }}
+                  transition={{ duration: 0.2 }}
+                  className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 border-2"
+                >
+                  {task.completed && (
+                    <motion.svg
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                      className="w-6 h-6 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={3}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 13l4 4L19 7"
+                      />
+                    </motion.svg>
+                  )}
+                </motion.div>
+
+                {/* Task Details */}
+                <div className="flex-1 text-left">
+                  <p className={`text-base font-bold ${task.completed ? 'text-gray-500' : 'text-gray-900'}`}>
+                    {task.title}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {task.kcal} kcal • {task.description}
+                  </p>
+                </div>
+
+                {/* Arrow */}
+                <svg
+                  className="w-5 h-5 text-gray-300"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom padding for fixed nav */}
+        <div className="h-24" />
+
+        {/* Fixed Bottom Navigation - Floating Pill Style */}
+        <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-6 bg-white/95 backdrop-blur-sm rounded-full px-6 py-3 shadow-lg shadow-gray-900/10">
+            {[
+              { id: 'dashboard', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+              { id: 'workouts', label: 'Workout', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
+              { id: 'nutrition', label: 'Food', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+              { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  flex flex-col items-center gap-0.5 transition-all duration-200
+                  ${activeTab === tab.id
+                    ? 'text-orange-500 scale-105'
+                    : 'text-gray-400 hover:text-gray-600'}
+                `}
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={activeTab === tab.id ? 2.5 : 2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d={tab.icon}
+                  />
+                </svg>
+                <span className={`text-[10px] font-semibold ${activeTab === tab.id ? 'text-orange-500' : ''}`}>
+                  {tab.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </nav>
+      </div>
     </div>
   );
 }

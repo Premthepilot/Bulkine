@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, useAnimation } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import type { WeeklyPlanOutput, Task as DietTask } from '@/lib/diet-engine';
 
 interface Task {
   id: string;
@@ -13,57 +15,75 @@ interface Task {
 }
 
 
-const INITIAL_TASKS: Task[] = [
-  {
-    id: 'shake',
-    title: 'Drink protein shake',
-    kcal: 400,
-    description: 'Post-workout',
-    completed: true,
-  },
-  {
-    id: 'lunch',
-    title: 'Eat lunch',
-    kcal: 600,
-    description: 'High carb focus',
-    completed: false,
-  },
-  {
-    id: 'snack',
-    title: 'Snack',
-    kcal: 300,
-    description: 'Healthy boost',
-    completed: false,
-  },
-];
-
-const BASE_CALORIES = 800;
-
 export default function DashboardPage() {
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const router = useRouter();
+  const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const baseGoal = 2500;
-  const surplus = 300;
-  const totalTarget = baseGoal + surplus;
 
   const mascotControls = useAnimation();
   const prevCaloriesRef = useRef<number>(0);
 
-  const caloriesConsumed = BASE_CALORIES + tasks
+  // Load plan from localStorage on mount
+  useEffect(() => {
+    const storedPlan = localStorage.getItem('userPlan');
+    if (storedPlan) {
+      try {
+        const parsedPlan = JSON.parse(storedPlan) as WeeklyPlanOutput;
+        setPlan(parsedPlan);
+
+        // Initialize tasks from plan
+        const planTasks: Task[] = parsedPlan.tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          kcal: t.kcal,
+          description: t.description,
+          completed: t.completed,
+        }));
+        setTasks(planTasks);
+      } catch (error) {
+        console.error('Error loading plan:', error);
+        // Redirect to onboarding if plan is invalid
+        router.push('/onboarding');
+      }
+    } else {
+      // No plan found, redirect to onboarding
+      router.push('/onboarding');
+    }
+  }, [router]);
+
+  // Calculate values (will be 0 if plan is null)
+  const totalTarget = plan?.targetCalories || 0;
+  const surplus = plan?.surplus || 0;
+
+  const caloriesConsumed = tasks
     .filter((t) => t.completed)
     .reduce((sum, t) => sum + t.kcal, 0);
 
-  const progress = Math.min((caloriesConsumed / totalTarget) * 100, 100);
+  const progress = totalTarget > 0 ? Math.min((caloriesConsumed / totalTarget) * 100, 100) : 0;
 
+  // Animation effect (must be called on every render)
   useEffect(() => {
-    if (caloriesConsumed > prevCaloriesRef.current) {
+    if (caloriesConsumed > prevCaloriesRef.current && plan) {
       mascotControls.start({
         scale: [1, 1.08, 1],
         transition: { duration: 0.4, ease: 'easeOut' },
       });
     }
     prevCaloriesRef.current = caloriesConsumed;
-  }, [caloriesConsumed, mascotControls]);
+  }, [caloriesConsumed, mascotControls, plan]);
+
+  // If plan is not loaded yet, show loading
+  if (!plan) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading your plan...</p>
+        </div>
+      </div>
+    );
+  }
 
   const toggleTask = (taskId: string) => {
     setTasks((prev) =>

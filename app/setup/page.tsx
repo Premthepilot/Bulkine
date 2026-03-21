@@ -7,6 +7,7 @@ import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
 import LottieAnimation from '../components/animations/LottieAnimation';
 import { successCheckmark } from '../components/animations/lottieData';
+import { generatePlanFromOnboarding } from '@/lib/diet-engine';
 
 interface OptionStep {
   id: number;
@@ -136,6 +137,32 @@ export default function SetupPage() {
     if (transitionPhase === 'creating') {
       setLoadingProgress(0);
 
+      // Generate the diet plan
+      try {
+        // Get onboarding data from localStorage
+        const onboardingDataStr = localStorage.getItem('onboardingData');
+        if (onboardingDataStr) {
+          const onboardingData = JSON.parse(onboardingDataStr);
+
+          // Combine with setup selections
+          const completeData = {
+            ...onboardingData,
+            appetite: selections[1],
+            mealsPerDay: selections[2],
+            dietPreference: selections[3],
+          };
+
+          // Generate the plan
+          const plan = generatePlanFromOnboarding(completeData);
+
+          // Store the plan
+          localStorage.setItem('userPlan', JSON.stringify(plan));
+          localStorage.setItem('userData', JSON.stringify(completeData));
+        }
+      } catch (error) {
+        console.error('Error generating plan:', error);
+      }
+
       const progressInterval = setInterval(() => {
         setLoadingProgress((prev) => {
           if (prev >= 100) return 100;
@@ -152,7 +179,7 @@ export default function SetupPage() {
         clearTimeout(finalTimer);
       };
     }
-  }, [transitionPhase]);
+  }, [transitionPhase, selections]);
 
   useEffect(() => {
     if (transitionPhase === 'final') {

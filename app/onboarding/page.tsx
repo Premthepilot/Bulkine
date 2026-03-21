@@ -215,6 +215,17 @@ export default function OnboardingPage() {
 
     // Handle timeline step - navigate to setup
     if (transitionPhase === 'final') {
+      // Store onboarding data before navigating to setup
+      const onboardingData = {
+        bodyType: selections[1],
+        mainGoal: selections[2],
+        workoutFrequency: selections[3],
+        height: heightValue,
+        weight: currentWeight,
+        goalWeight: goalWeight,
+        commitment: selections[7],
+      };
+      localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
       router.push('/setup');
       return;
     }

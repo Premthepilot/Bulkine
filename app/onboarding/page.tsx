@@ -77,13 +77,13 @@ const STEPS: Step[] = [
   {
     id: 3,
     type: 'options',
-    title: 'How many meals do you eat daily?',
+    title: 'How often do you workout?',
     subtitle: '',
     options: [
-      { id: '1-2', emoji: '', title: '1-2 meals' },
-      { id: '3', emoji: '', title: '3 meals' },
-      { id: '4-5', emoji: '', title: '4-5 meals' },
-      { id: '5+', emoji: '', title: '5+ meals' },
+      { id: 'none', emoji: '', title: 'I don\'t work out' },
+      { id: '1-2', emoji: '', title: '1–2 times/week' },
+      { id: '3-5', emoji: '', title: '3–5 times/week' },
+      { id: 'daily', emoji: '', title: 'Almost daily' },
     ],
   },
   {

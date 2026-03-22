@@ -14,7 +14,13 @@ export default function Home() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.replace('/dashboard');
+        // Check if onboarding is complete
+        const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
+        if (onboardingComplete) {
+          router.replace('/dashboard');
+        } else {
+          router.replace('/onboarding');
+        }
       } else {
         setCheckingSession(false);
       }

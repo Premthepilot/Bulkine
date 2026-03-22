@@ -18,7 +18,13 @@ export default function SignupPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.replace('/dashboard');
+        // Check if onboarding is complete
+        const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
+        if (onboardingComplete) {
+          router.replace('/dashboard');
+        } else {
+          router.replace('/onboarding');
+        }
       } else {
         setCheckingSession(false);
       }
@@ -64,7 +70,8 @@ export default function SignupPage() {
     if (data.user && !data.session) {
       setSuccess('Check your email to confirm your account!');
     } else if (data.session) {
-      router.replace('/dashboard');
+      // New signup - always go to onboarding
+      router.replace('/onboarding');
     }
 
     setLoading(false);

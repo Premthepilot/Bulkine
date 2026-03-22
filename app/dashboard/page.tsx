@@ -105,6 +105,15 @@ function DashboardPageClient() {
           return;
         }
 
+        // Check if onboarding is complete
+        if (typeof window !== 'undefined') {
+          const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
+          if (!onboardingComplete) {
+            router.push('/onboarding');
+            return;
+          }
+        }
+
         // Try to migrate localStorage data first (one-time operation)
         if (typeof window !== 'undefined') {
           const migrationKey = 'supabase_migration_completed';
@@ -121,8 +130,9 @@ function DashboardPageClient() {
 
         // Load user profile
         const profile = await getUserProfile();
-        if (!profile) {
-          // No profile found, redirect to onboarding
+        if (!profile || !profile.user_plan) {
+          // No profile or plan found, redirect to onboarding
+          localStorage.removeItem('onboardingComplete');
           router.push('/onboarding');
           return;
         }

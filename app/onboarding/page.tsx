@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
 import WeightSlider from '../components/onboarding/WeightSlider';
+import { supabase } from '@/lib/supabase';
 
 interface OptionStep {
   id: number;
@@ -149,6 +150,7 @@ const pageVariants = {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
   const [direction, setDirection] = useState(1);
   const [selections, setSelections] = useState<Record<number, string>>({});
@@ -166,6 +168,29 @@ export default function OnboardingPage() {
   // "creating" → creating plan screen (no going back)
   // "final" → timeline screen (no going back)
   const [transitionPhase, setTransitionPhase] = useState<'normal' | 'creating' | 'final'>('normal');
+
+  // Check session and onboarding status on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Not logged in, redirect to login
+        router.replace('/login');
+        return;
+      }
+
+      // Check if onboarding is already complete
+      const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
+      if (onboardingComplete) {
+        // Already completed, redirect to dashboard
+        router.replace('/dashboard');
+        return;
+      }
+
+      setCheckingSession(false);
+    };
+    checkSession();
+  }, [router]);
 
   // Sync goal weight when current weight changes (ensure goal >= current)
   useEffect(() => {
@@ -519,6 +544,15 @@ export default function OnboardingPage() {
 
     return null;
   };
+
+  // Show loading while checking session
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-pulse text-zinc-500">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 h-screen bg-white flex flex-col overflow-hidden">

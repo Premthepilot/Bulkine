@@ -225,6 +225,55 @@ export default function DashboardPage() {
 
   const displayProgress = getDisplayProgress(weightProgress);
 
+  // Streak calculation logic
+  const getCompletedDates = () => {
+    const completedDates: string[] = [];
+
+    // Check the last 90 days for completed goals
+    for (let i = 0; i < 90; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toDateString();
+
+      const dayFoodLog = localStorage.getItem(`foodLog_${dateStr}`);
+      if (dayFoodLog) {
+        const entries: FoodLogEntry[] = JSON.parse(dayFoodLog);
+        const dayCalories = entries.reduce((sum, entry) => sum + entry.kcal, 0);
+
+        // Day is completed if >= 80% of goal
+        if (dayCalories >= (totalTarget * 0.8)) {
+          completedDates.push(dateStr);
+        }
+      }
+    }
+
+    return completedDates;
+  };
+
+  const completedDates = getCompletedDates();
+
+  // Calculate current streak based on consecutive completed days
+  const calculateCurrentStreak = () => {
+    let currentStreak = 0;
+    const today = new Date();
+
+    for (let i = 0; i < 90; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toDateString();
+
+      if (completedDates.includes(dateStr)) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+
+    return currentStreak;
+  };
+
+  const calculatedStreak = calculateCurrentStreak();
+
   // Get mascot state based on progress
   const getMascotState = () => {
     if (viewMode === 'overall') {
@@ -479,46 +528,58 @@ export default function DashboardPage() {
       <div className="w-full max-w-sm min-h-screen bg-[#F8F9FA] flex flex-col overflow-y-auto">
         {/* Header */}
         <header className="px-6 pt-8 pb-4 flex items-center justify-between">
-          {/* Streak Indicator */}
-          <motion.div
-            key={streak}
-            initial={{ scale: 1 }}
-            animate={streak > prevStreak ? {
-              scale: [1, 1.2, 1],
-              transition: { duration: 0.4, ease: 'easeOut' }
-            } : {}}
-            className="flex items-center gap-2"
-          >
-            <span className="text-2xl">🔥</span>
-            <span className="text-2xl font-bold text-gray-900 tabular-nums">
-              {streak}
-            </span>
-          </motion.div>
+          {activeTab === 'streaks' ? (
+            /* Streaks Page Header */
+            <div className="w-full">
+              <h1 className="text-xl font-semibold text-gray-900">
+                Streaks
+              </h1>
+            </div>
+          ) : (
+            /* Default Header */
+            <>
+              {/* Streak Indicator - hide on streaks page to avoid duplicate */}
+              <motion.div
+                key={streak}
+                initial={{ scale: 1 }}
+                animate={streak > prevStreak ? {
+                  scale: [1, 1.2, 1],
+                  transition: { duration: 0.4, ease: 'easeOut' }
+                } : {}}
+                className="flex items-center gap-2"
+              >
+                <span className="text-2xl">🔥</span>
+                <span className="text-2xl font-bold text-gray-900 tabular-nums">
+                  {streak}
+                </span>
+              </motion.div>
 
-          <h1 className="text-2xl font-bold text-orange-600 tracking-tight">
-            BULKINE
-          </h1>
+              <h1 className="text-2xl font-bold text-orange-600 tracking-tight">
+                BULKINE
+              </h1>
 
-          <button className="w-10 h-10 flex items-center justify-center text-gray-500">
-            <svg
-              className="w-7 h-7"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </button>
+              <button className="w-10 h-10 flex items-center justify-center text-gray-500">
+                <svg
+                  className="w-7 h-7"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </button>
+            </>
+          )}
         </header>
 
         {/* Dashboard Tab Content */}
@@ -1238,6 +1299,158 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Streaks Tab Content */}
+        {activeTab === 'streaks' && (
+          <div className="px-6 pt-4 pb-6 flex-1">
+            {/* Streak Hero Section - Compact */}
+            <div className="mb-6">
+              <div className="bg-white rounded-3xl p-6 text-center shadow-sm">
+                {/* Flame + Number Row */}
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                  className="flex items-center justify-center gap-3 mb-2"
+                >
+                  {/* Flame with subtle glow */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-orange-400/20 rounded-full blur-xl scale-150" />
+                    <span className="relative text-5xl">🔥</span>
+                  </div>
+
+                  {/* Streak Number */}
+                  <span className="text-6xl font-black text-gray-900 tracking-tight">
+                    {calculatedStreak}
+                  </span>
+                </motion.div>
+
+                {/* Streak Label */}
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3, delay: 0.1 }}
+                  className="text-lg font-bold text-gray-500 mb-1"
+                >
+                  {calculatedStreak === 1 ? 'Day Streak' : 'Days Streak'}
+                </motion.p>
+
+                {/* Motivational Message */}
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3, delay: 0.2 }}
+                  className="text-base font-semibold text-gray-700"
+                >
+                  {calculatedStreak >= 7
+                    ? "Keep it going ✨"
+                    : calculatedStreak >= 3
+                    ? "Building momentum ✨"
+                    : calculatedStreak >= 1
+                    ? "Great start ✨"
+                    : "Let's start again ✨"
+                  }
+                </motion.p>
+              </div>
+            </div>
+
+            {/* Calendar */}
+            <div className="bg-white rounded-2xl p-5">
+              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-4 text-center">
+                {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}
+              </h3>
+
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-1 mb-4">
+                {/* Day headers */}
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+                  <div key={index} className="text-center text-xs font-bold text-gray-400 py-2">
+                    {day}
+                  </div>
+                ))}
+
+                {/* Calendar days */}
+                {Array.from({ length: 42 }, (_, index) => {
+                  const today = new Date();
+                  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                  const startCalendar = new Date(firstDay);
+                  startCalendar.setDate(startCalendar.getDate() - firstDay.getDay());
+
+                  const currentDate = new Date(startCalendar);
+                  currentDate.setDate(currentDate.getDate() + index);
+
+                  const isCurrentMonth = currentDate.getMonth() === today.getMonth();
+                  const isToday = currentDate.toDateString() === today.toDateString();
+                  const isCompleted = completedDates.includes(currentDate.toDateString());
+
+                  return (
+                    <div
+                      key={index}
+                      className={`
+                        aspect-square flex items-center justify-center text-sm font-medium rounded-lg relative
+                        ${!isCurrentMonth
+                          ? 'text-gray-300'
+                          : isCompleted
+                            ? 'bg-orange-500 text-white'
+                            : 'text-gray-600'
+                        }
+                        ${isToday ? 'ring-2 ring-orange-300' : ''}
+                      `}
+                    >
+                      {currentDate.getDate()}
+
+                      {/* Completion indicator */}
+                      {isCompleted && isCurrentMonth && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="absolute inset-0 bg-orange-500 rounded-lg flex items-center justify-center"
+                        >
+                          <span className="text-white font-bold">{currentDate.getDate()}</span>
+                        </motion.div>
+                      )}
+
+                      {/* Today indicator */}
+                      {isToday && !isCompleted && (
+                        <div className="absolute inset-0 rounded-lg ring-2 ring-orange-500 ring-offset-1" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center justify-center gap-6 text-xs text-gray-500 border-t border-gray-100 pt-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-500 rounded-full" />
+                  <span>Completed</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 border-2 border-orange-500 rounded-full" />
+                  <span>Today</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gray-200 rounded-full" />
+                  <span>Missed</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Streak Stats */}
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-orange-500">{completedDates.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Total completed</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-gray-900">
+                  {Math.round((completedDates.length / Math.min(90, Math.floor((Date.now() - new Date('2024-01-01').getTime()) / (1000 * 60 * 60 * 24)))) * 100) || 0}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Success rate</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Bottom padding for fixed nav */}
         <div className="h-24" />
 
@@ -1246,7 +1459,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-6 bg-white/95 backdrop-blur-sm rounded-full px-6 py-3 shadow-lg shadow-gray-900/10">
             {[
               { id: 'dashboard', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-              { id: 'workouts', label: 'Workout', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
+              { id: 'streaks', label: 'Streaks', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
               { id: 'nutrition', label: 'Food', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
               { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
             ].map((tab) => (

@@ -1,7 +1,35 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import Link from "next/link";
+import { supabase } from '@/lib/supabase';
 
 export default function Home() {
+  const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace('/dashboard');
+      } else {
+        setCheckingSession(false);
+      }
+    };
+    checkSession();
+  }, [router]);
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <div className="animate-pulse text-zinc-500">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-screen flex flex-col justify-between max-w-md mx-auto bg-surface overflow-hidden">
       {/* Hero Image */}
@@ -40,10 +68,10 @@ export default function Home() {
       {/* CTA Buttons */}
       <footer className="px-8 pb-8 flex flex-col items-center gap-2">
         <Link
-          href="/onboarding"
+          href="/signup"
           className="w-full bg-primary-container text-on-primary font-headline font-bold text-xl py-5 rounded-full shadow-lg shadow-primary-container/20 active:scale-95 transition-transform duration-200 text-center"
         >
-          Start
+          Start Journey
         </Link>
         <Link
           href="/login"

@@ -98,20 +98,12 @@ function DashboardPageClient() {
         setLoading(true);
         setError(null);
 
-        // Check if user is authenticated
+        // Get current user (routing is handled by home page)
         const user = await getCurrentUser();
         if (!user) {
-          router.push('/login');
+          setError('Not authenticated');
+          setLoading(false);
           return;
-        }
-
-        // Check if onboarding is complete
-        if (typeof window !== 'undefined') {
-          const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
-          if (!onboardingComplete) {
-            router.push('/onboarding');
-            return;
-          }
         }
 
         // Try to migrate localStorage data first (one-time operation)
@@ -131,9 +123,9 @@ function DashboardPageClient() {
         // Load user profile
         const profile = await getUserProfile();
         if (!profile || !profile.user_plan) {
-          // No profile or plan found, redirect to onboarding
-          localStorage.removeItem('onboardingComplete');
-          router.push('/onboarding');
+          // No profile or plan found
+          setError('No user profile found. Please complete onboarding.');
+          setLoading(false);
           return;
         }
 
@@ -203,7 +195,7 @@ function DashboardPageClient() {
     };
 
     loadUserData();
-  }, [router]);
+  }, []); // Removed router dependency since we're not using redirects
 
   // Handle streak updates when food is logged
   useEffect(() => {

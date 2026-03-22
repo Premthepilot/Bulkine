@@ -17,13 +17,8 @@ export default function LoginPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        // Check if onboarding is complete
-        const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
-        if (onboardingComplete) {
-          router.replace('/dashboard');
-        } else {
-          router.replace('/onboarding');
-        }
+        // Redirect to home page - it will handle routing
+        router.replace('/');
       } else {
         setCheckingSession(false);
       }
@@ -61,13 +56,8 @@ export default function LoginPage() {
       return;
     }
 
-    // Check if onboarding is complete and redirect accordingly
-    const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
-    if (onboardingComplete) {
-      router.replace('/dashboard');
-    } else {
-      router.replace('/onboarding');
-    }
+    // Redirect to home page - it will handle routing
+    router.replace('/');
   };
 
   if (checkingSession) {

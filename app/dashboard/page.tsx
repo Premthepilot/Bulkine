@@ -179,7 +179,7 @@ function DashboardPageClient() {
             await updateStreak({
               dailyStreak: profile.daily_streak || 0,
               lastLogDate: profile.last_log_date,
-              lastActiveDate: today.toISOString().split('T')[0]
+              lastActiveDate: today
             });
           }
         }

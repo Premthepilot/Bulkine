@@ -54,6 +54,7 @@ const STEPS: Step[] = [
     type: 'options',
     title: 'Time for workouts?',
     options: [
+      { id: 'none', title: 'I don\'t work out' },
       { id: '10-20', title: '10–20 minutes' },
       { id: '30-45', title: '30–45 minutes' },
       { id: '60', title: '1 hour' },

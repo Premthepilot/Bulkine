@@ -34,17 +34,23 @@ export default function DashboardPage() {
   const [prevStreak, setPrevStreak] = useState(0);
   const [viewMode, setViewMode] = useState<'daily' | 'overall'>('daily');
   const [tempMessage, setTempMessage] = useState<{ text: string; emoji: string } | null>(null);
+  const [showCelebration, setShowCelebration] = useState<{ level: number; message: string } | null>(null);
+
+  // DEV ONLY: Test override for weight progress
+  const [testWeightProgress, setTestWeightProgress] = useState<number | null>(null);
 
   // Weight tracking state
   const [weightHistory, setWeightHistory] = useState<{ weight: number; date: string }[]>([]);
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [newWeight, setNewWeight] = useState('');
   const [startingWeight, setStartingWeight] = useState(0);
+  const [goalWeight, setGoalWeight] = useState(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mascotControls = useAnimation();
   const prevCaloriesRef = useRef<number>(0);
   const prevProgressRef = useRef<number>(0);
+  const prevWeightProgressRef = useRef<number>(0);
 
   // Preload all mascot images to prevent flickering
   useEffect(() => {
@@ -77,8 +83,23 @@ export default function DashboardPage() {
       router.push('/onboarding');
     }
 
-    // Load today's food log
+    // Daily reset system - check if it's a new day
     const today = new Date().toDateString();
+    const lastActiveDate = localStorage.getItem('lastActiveDate');
+
+    if (lastActiveDate && lastActiveDate !== today) {
+      // New day detected - show welcome message
+      setTempMessage({
+        text: "New day. Let's grow",
+        emoji: '💪',
+      });
+      setTimeout(() => setTempMessage(null), 2000);
+    }
+
+    // Update last active date
+    localStorage.setItem('lastActiveDate', today);
+
+    // Load today's food log (already date-keyed, so new day = fresh start)
     const storedLog = localStorage.getItem(`foodLog_${today}`);
     if (storedLog) {
       setFoodLog(JSON.parse(storedLog));
@@ -116,11 +137,12 @@ export default function DashboardPage() {
       setWeightHistory(JSON.parse(storedWeightHistory));
     }
 
-    // Load starting weight from onboarding data
-    const onboardingData = localStorage.getItem('onboardingData');
-    if (onboardingData) {
-      const data = JSON.parse(onboardingData);
-      setStartingWeight(data.weight || 0);
+    // Load starting weight and goal weight from user data
+    const userDataStr = localStorage.getItem('userData');
+    if (userDataStr) {
+      const userData = JSON.parse(userDataStr);
+      setStartingWeight(userData.weight);
+      setGoalWeight(userData.goalWeight);
     }
   }, [router]);
 
@@ -179,31 +201,67 @@ export default function DashboardPage() {
   const caloriesConsumed = foodLog.reduce((sum, entry) => sum + entry.kcal, 0);
   const progress = totalTarget > 0 ? Math.min((caloriesConsumed / totalTarget) * 100, 100) : 0;
 
+  // Get current weight (latest entry or starting weight)
+  const currentWeight = weightHistory.length > 0
+    ? weightHistory[weightHistory.length - 1].weight
+    : startingWeight;
+
+  // Calculate weight progress for overall mode (milestone-based)
+  const calculatedWeightProgress = goalWeight > startingWeight
+    ? Math.min(Math.max(((currentWeight - startingWeight) / (goalWeight - startingWeight)) * 100, 0), 100)
+    : 0;
+
+  // Use test override if set, otherwise use calculated value
+  const weightProgress = testWeightProgress !== null ? testWeightProgress : calculatedWeightProgress;
+
+  // Calculate display progress - snaps to milestone markers for clean visual alignment
+  const getDisplayProgress = (progress: number) => {
+    if (progress >= 100) return 100;
+    if (progress >= 75) return 75;
+    if (progress >= 50) return 50;
+    if (progress >= 25) return 25;
+    return 0;
+  };
+
+  const displayProgress = getDisplayProgress(weightProgress);
+
   // Get mascot state based on progress
   const getMascotState = () => {
     if (viewMode === 'overall') {
-      // Overall view: based on streak (long-term progress)
-      if (streak >= 21) {
+      // Overall view: based on weight progress milestones
+      if (weightProgress >= 75) {
         return {
           level: 'strong' as const,
           image: '/mascot/capy-strong.png',
           size: 'w-56 h-56',
           glow: 'drop-shadow(0 0 24px rgba(249, 115, 22, 0.35))',
-          statusText: "Elite bulker",
-          statusEmoji: '👑',
+          statusText: "You're almost there",
+          statusEmoji: '🏆',
           statusColor: 'text-orange-500',
           bgGlow: 'bg-orange-500/10',
         };
       }
-      if (streak >= 8) {
+      if (weightProgress >= 50) {
         return {
           level: 'improving' as const,
           image: '/mascot/capy-improving.png',
           size: 'w-52 h-52',
           glow: 'drop-shadow(0 0 16px rgba(249, 115, 22, 0.2))',
-          statusText: "Making gains",
+          statusText: "Looking stronger",
           statusEmoji: '💪',
           statusColor: 'text-gray-600',
+          bgGlow: 'bg-orange-500/5',
+        };
+      }
+      if (weightProgress >= 25) {
+        return {
+          level: 'improving' as const,
+          image: '/mascot/capy-improving.png',
+          size: 'w-50 h-50',
+          glow: 'drop-shadow(0 0 12px rgba(249, 115, 22, 0.15))',
+          statusText: "Building momentum",
+          statusEmoji: '📈',
+          statusColor: 'text-gray-500',
           bgGlow: 'bg-orange-500/5',
         };
       }
@@ -212,7 +270,7 @@ export default function DashboardPage() {
         image: '/mascot/capy-workout.png',
         size: 'w-48 h-48',
         glow: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1))',
-        statusText: "Starting journey",
+        statusText: "Just getting started",
         statusEmoji: '🌱',
         statusColor: 'text-gray-400',
         bgGlow: 'bg-transparent',
@@ -267,39 +325,45 @@ export default function DashboardPage() {
     prevCaloriesRef.current = caloriesConsumed;
   }, [caloriesConsumed, mascotControls, plan]);
 
-  // Show temporary message only on positive threshold crossings
+  // Show celebration on milestone threshold crossings (Overall mode only)
   useEffect(() => {
-    if (viewMode !== 'daily') {
-      prevProgressRef.current = progress;
+    if (viewMode !== 'overall') {
+      prevWeightProgressRef.current = weightProgress;
       return;
     }
 
-    const prevProgress = prevProgressRef.current;
-    const currentProgress = progress;
+    const prevProgress = prevWeightProgressRef.current;
+    const currentProgress = weightProgress;
 
-    // Only trigger on upward threshold crossings
-    if (prevProgress < 30 && currentProgress >= 30) {
-      setTempMessage({
-        text: "Getting stronger",
-        emoji: '💪',
-      });
-      const timer = setTimeout(() => setTempMessage(null), 1500);
-      prevProgressRef.current = currentProgress;
-      return () => clearTimeout(timer);
+    // Define weight milestones with messages
+    const milestones = [
+      { threshold: 25, level: 1, message: "Building momentum" },
+      { threshold: 50, level: 2, message: "Looking stronger" },
+      { threshold: 75, level: 3, message: "You're almost there" },
+      { threshold: 100, level: 4, message: "Goal achieved!" },
+    ];
+
+    // Check for milestone crossings (upward only)
+    for (const milestone of milestones) {
+      if (prevProgress < milestone.threshold && currentProgress >= milestone.threshold) {
+        // Trigger celebration
+        setShowCelebration({ level: milestone.level, message: milestone.message });
+
+        // Animate mascot
+        mascotControls.start({
+          scale: [1, 1.1, 1],
+          transition: { duration: 0.5, ease: 'easeOut' },
+        });
+
+        // Auto dismiss after 1.5s
+        const timer = setTimeout(() => setShowCelebration(null), 1500);
+        prevWeightProgressRef.current = currentProgress;
+        return () => clearTimeout(timer);
+      }
     }
 
-    if (prevProgress < 70 && currentProgress >= 70) {
-      setTempMessage({
-        text: "You're on fire",
-        emoji: '🔥',
-      });
-      const timer = setTimeout(() => setTempMessage(null), 1500);
-      prevProgressRef.current = currentProgress;
-      return () => clearTimeout(timer);
-    }
-
-    prevProgressRef.current = currentProgress;
-  }, [progress, viewMode]);
+    prevWeightProgressRef.current = currentProgress;
+  }, [weightProgress, viewMode, mascotControls]);
 
   // Loading state
   if (!plan) {
@@ -382,11 +446,6 @@ export default function DashboardPage() {
     setShowWeightModal(false);
   };
 
-  // Get current weight (latest entry or starting weight)
-  const currentWeight = weightHistory.length > 0
-    ? weightHistory[weightHistory.length - 1].weight
-    : startingWeight;
-
   // Get total weight gained
   const weightGained = currentWeight - startingWeight;
 
@@ -396,6 +455,15 @@ export default function DashboardPage() {
     : null;
 
   const getMotivationText = () => {
+    // Overall mode: milestone-based motivation
+    if (viewMode === 'overall') {
+      if (weightProgress >= 75) return { main: "You're almost there", highlight: '' };
+      if (weightProgress >= 50) return { main: "Looking stronger", highlight: '' };
+      if (weightProgress >= 25) return { main: "Building momentum", highlight: '' };
+      return { main: "Just getting started", highlight: '' };
+    }
+
+    // Daily mode: Based on today's progress
     const percentage = (caloriesConsumed / totalTarget) * 100;
     if (percentage >= 100) return { main: 'Amazing work today!', highlight: "You've crushed your goal!" };
     if (percentage >= 75) return { main: 'Almost there!', highlight: 'Keep pushing!' };
@@ -613,26 +681,112 @@ export default function DashboardPage() {
             className="text-lg font-bold text-gray-900 leading-tight"
           >
             {motivation.main}{' '}
-            <span className="text-orange-600">{motivation.highlight}</span>
+            {motivation.highlight && (
+              <span className="text-orange-600">{motivation.highlight}</span>
+            )}
           </motion.p>
+          {viewMode === 'overall' && (
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="mt-4"
+            >
+              {/* Weight Progress Bar */}
+              <div className="relative mt-2">
+                <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${displayProgress}%` }}
+                    transition={{ duration: 0.8, ease: 'easeOut' }}
+                    className={`h-full bg-gradient-to-r from-orange-400 to-orange-500 ${
+                      displayProgress === 100 ? 'rounded-full' : 'rounded-l-full'
+                    }`}
+                  />
+                </div>
+                {/* Milestone markers */}
+                <div className="absolute top-0 left-0 right-0 h-3 flex items-center">
+                  <div className="absolute left-1/4 w-0.5 h-3 bg-gray-300" />
+                  <div className="absolute left-1/2 w-0.5 h-3 bg-gray-300" />
+                  <div className="absolute left-3/4 w-0.5 h-3 bg-gray-300" />
+                </div>
+              </div>
+              {/* Progress info */}
+              <div className="flex justify-between items-center mt-3 text-sm">
+                <span className="text-gray-500">{startingWeight} kg</span>
+                <span className="font-bold text-orange-600">{Math.round(weightProgress)}%</span>
+                <span className="text-gray-500">{goalWeight} kg</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Current: {currentWeight} kg
+              </p>
+
+              {/* DEV ONLY: Test milestone triggers */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-4 p-3 bg-yellow-50 border-2 border-yellow-300 rounded-xl">
+                  <p className="text-[10px] font-bold text-yellow-800 mb-2">⚠️ DEV: Test Milestones</p>
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      onClick={() => {
+                        prevWeightProgressRef.current = 0;
+                        setTestWeightProgress(26);
+                      }}
+                      className="flex-1 py-1.5 bg-yellow-200 hover:bg-yellow-300 text-yellow-900 text-xs font-semibold rounded-lg"
+                    >
+                      Test 25%
+                    </button>
+                    <button
+                      onClick={() => {
+                        prevWeightProgressRef.current = 0;
+                        setTestWeightProgress(51);
+                      }}
+                      className="flex-1 py-1.5 bg-yellow-200 hover:bg-yellow-300 text-yellow-900 text-xs font-semibold rounded-lg"
+                    >
+                      Test 50%
+                    </button>
+                    <button
+                      onClick={() => {
+                        prevWeightProgressRef.current = 0;
+                        setTestWeightProgress(76);
+                      }}
+                      className="flex-1 py-1.5 bg-yellow-200 hover:bg-yellow-300 text-yellow-900 text-xs font-semibold rounded-lg"
+                    >
+                      Test 75%
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTestWeightProgress(null);
+                      prevWeightProgressRef.current = calculatedWeightProgress;
+                    }}
+                    className="w-full py-1.5 bg-red-200 hover:bg-red-300 text-red-900 text-xs font-semibold rounded-lg"
+                  >
+                    Reset to Real Progress
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          )}
         </div>
 
-        {/* Calorie Remaining */}
-        <div className="px-6 pb-6 text-center">
-          <p className="text-base text-gray-600">
-            You need{' '}
-            <motion.span
-              key={caloriesConsumed}
-              initial={{ scale: 1.05 }}
-              animate={{ scale: 1 }}
-              transition={{ duration: 0.3 }}
-              className="font-bold text-orange-600"
-            >
-              {Math.max(0, totalTarget - caloriesConsumed)} kcal
-            </motion.span>
-            {' '}more today
-          </p>
-        </div>
+        {/* Calorie Remaining - Only show in daily mode */}
+        {viewMode === 'daily' && (
+          <div className="px-6 pb-6 text-center">
+            <p className="text-base text-gray-600">
+              You need{' '}
+              <motion.span
+                key={caloriesConsumed}
+                initial={{ scale: 1.05 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className="font-bold text-orange-600"
+              >
+                {Math.max(0, totalTarget - caloriesConsumed)} kcal
+              </motion.span>
+              {' '}more today
+            </p>
+          </div>
+        )}
 
         {/* Food Logging Section */}
         <div className="px-6 pb-6">
@@ -1126,6 +1280,63 @@ export default function DashboardPage() {
             ))}
           </div>
         </nav>
+
+        {/* Level Up Celebration Overlay */}
+        <AnimatePresence>
+          {showCelebration && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="text-center"
+              >
+                {/* Glow effect */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 0.6, scale: 1.2 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 bg-orange-500/20 rounded-full blur-3xl"
+                />
+
+                {/* Content */}
+                <div className="relative">
+                  <motion.p
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="text-5xl font-bold text-white mb-2"
+                  >
+                    Level Up
+                  </motion.p>
+                  <motion.p
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="text-6xl mb-3"
+                  >
+                    🎉
+                  </motion.p>
+                  <motion.p
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-xl text-white/90 font-medium"
+                  >
+                    {showCelebration.message}
+                  </motion.p>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

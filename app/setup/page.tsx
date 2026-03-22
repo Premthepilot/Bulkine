@@ -141,60 +141,65 @@ export default function SetupPage() {
 
       setLoadingProgress(0);
 
-      // Generate the diet plan
-      try {
-        // Check if user is authenticated
-        const user = await getCurrentUser();
-        if (!user) {
-          console.error('User not authenticated');
-          return;
+      // Generate the diet plan and save to Supabase (async IIFE)
+      const saveProfile = async () => {
+        try {
+          // Check if user is authenticated
+          const user = await getCurrentUser();
+          if (!user) {
+            console.error('User not authenticated');
+            return;
+          }
+
+          // Get onboarding data from localStorage (temporarily, until migration is complete)
+          const onboardingDataStr = localStorage.getItem('onboardingData');
+          if (onboardingDataStr) {
+            const onboardingData = JSON.parse(onboardingDataStr);
+
+            // Combine with setup selections
+            const completeData = {
+              ...onboardingData,
+              appetite: selections[1],
+              mealsPerDay: selections[2],
+              dietPreference: selections[3],
+            };
+
+            // Generate the plan
+            const plan = generatePlanFromOnboarding(completeData);
+
+            // Prepare profile data for Supabase
+            const profileData = {
+              body_type: completeData.bodyType,
+              main_goal: completeData.mainGoal,
+              workout_frequency: completeData.workoutFrequency,
+              height: completeData.height,
+              weight: completeData.weight,
+              goal_weight: completeData.goalWeight,
+              commitment: completeData.commitment,
+              appetite: completeData.appetite,
+              meals_per_day: completeData.mealsPerDay,
+              diet_preference: completeData.dietPreference,
+              user_plan: plan,
+              daily_streak: 0,
+              last_log_date: null,
+              last_active_date: new Date().toISOString().split('T')[0]
+            };
+
+            // Save to Supabase
+            await upsertUserProfile(profileData);
+
+            // Clean up localStorage after successful save
+            localStorage.removeItem('onboardingData');
+
+            console.log('User profile saved to Supabase successfully');
+          }
+        } catch (error) {
+          console.error('Error generating plan:', error);
         }
+      };
 
-        // Get onboarding data from localStorage (temporarily, until migration is complete)
-        const onboardingDataStr = localStorage.getItem('onboardingData');
-        if (onboardingDataStr) {
-          const onboardingData = JSON.parse(onboardingDataStr);
-
-          // Combine with setup selections
-          const completeData = {
-            ...onboardingData,
-            appetite: selections[1],
-            mealsPerDay: selections[2],
-            dietPreference: selections[3],
-          };
-
-          // Generate the plan
-          const plan = generatePlanFromOnboarding(completeData);
-
-          // Prepare profile data for Supabase
-          const profileData = {
-            body_type: completeData.bodyType,
-            main_goal: completeData.mainGoal,
-            workout_frequency: completeData.workoutFrequency,
-            height: completeData.height,
-            weight: completeData.weight,
-            goal_weight: completeData.goalWeight,
-            commitment: completeData.commitment,
-            appetite: completeData.appetite,
-            meals_per_day: completeData.mealsPerDay,
-            diet_preference: completeData.dietPreference,
-            user_plan: plan,
-            daily_streak: 0,
-            last_log_date: null,
-            last_active_date: new Date().toISOString().split('T')[0]
-          };
-
-          // Save to Supabase
-          await upsertUserProfile(profileData);
-
-          // Clean up localStorage after successful save
-          localStorage.removeItem('onboardingData');
-
-          console.log('User profile saved to Supabase successfully');
-        }
-      } catch (error) {
-        console.error('Error generating plan:', error);
-      }
+      // Call the async function
+      saveProfile();
 
       const progressInterval = setInterval(() => {
         setLoadingProgress((prev) => {

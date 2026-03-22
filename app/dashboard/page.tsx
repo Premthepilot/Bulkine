@@ -689,6 +689,7 @@ function DashboardPageClient() {
 
         {/* Main Content */}
         {!loading && !error && (
+        <>
         {/* Header */}
         <header className="px-6 pt-8 pb-4 flex items-center justify-between">
           {activeTab === 'streaks' ? (
@@ -1734,6 +1735,7 @@ function DashboardPageClient() {
         </AnimatePresence>
 
         {/* End of Main Content */}
+        </>
         )}
       </div>
     </div>

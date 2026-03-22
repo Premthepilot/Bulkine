@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, useAnimation, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import type { WeeklyPlanOutput } from '@/lib/diet-engine';
 import { searchFoods, type FoodItem, type Ingredient } from '@/lib/food-database';
 
@@ -16,7 +17,7 @@ interface FoodLogEntry {
   ingredients?: Ingredient[];
 }
 
-export default function DashboardPage() {
+function DashboardPageClient() {
   const router = useRouter();
   const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -42,7 +43,6 @@ export default function DashboardPage() {
   // Streak tracking state (client-side only)
   const [completedDates, setCompletedDates] = useState<string[]>([]);
   const [calculatedStreak, setCalculatedStreak] = useState(0);
-  const [isClient, setIsClient] = useState(false);
 
   // Weight tracking state
   const [weightHistory, setWeightHistory] = useState<{ weight: number; date: string }[]>([]);
@@ -59,8 +59,6 @@ export default function DashboardPage() {
 
   // Preload all mascot images to prevent flickering
   useEffect(() => {
-    setIsClient(true); // Mark as client-side
-
     const imagesToPreload = [
       '/mascot/capy-workout.png',
       '/mascot/capy-improving.png',
@@ -418,7 +416,7 @@ export default function DashboardPage() {
   }, [weightProgress, viewMode, mascotControls]);
 
   // Loading state
-  if (!plan || !isClient) {
+  if (!plan) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -1559,3 +1557,17 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+const DashboardPage = dynamic(() => Promise.resolve(DashboardPageClient), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-gray-600">Loading your plan...</p>
+      </div>
+    </div>
+  ),
+});
+
+export default DashboardPage;

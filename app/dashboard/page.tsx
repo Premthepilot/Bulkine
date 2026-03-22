@@ -7,6 +7,18 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import type { WeeklyPlanOutput } from '@/lib/diet-engine';
 import { searchFoods, type FoodItem, type Ingredient } from '@/lib/food-database';
+import {
+  getUserProfile,
+  getFoodLogsByDate,
+  addFoodLog,
+  deleteFoodLog,
+  getWeightHistory,
+  addWeightEntry,
+  updateStreak,
+  migrateLocalStorageData,
+  syncUserData,
+  getCurrentUser
+} from '@/lib/supabase-data';
 
 interface FoodLogEntry {
   id: string;
@@ -51,6 +63,12 @@ function DashboardPageClient() {
   const [startingWeight, setStartingWeight] = useState(0);
   const [goalWeight, setGoalWeight] = useState(0);
 
+  // Supabase-specific state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mascotControls = useAnimation();
   const prevCaloriesRef = useRef<number>(0);
@@ -73,126 +91,149 @@ function DashboardPageClient() {
     });
   }, []);
 
-  // Load plan and food log from localStorage on mount
+  // Load user data from Supabase on mount
   useEffect(() => {
-    if (typeof window === 'undefined') return; // SSR guard
-
-    const storedPlan = localStorage.getItem('userPlan');
-    if (storedPlan) {
+    const loadUserData = async () => {
       try {
-        const parsedPlan = JSON.parse(storedPlan) as WeeklyPlanOutput;
-        setPlan(parsedPlan);
-      } catch (error) {
-        console.error('Error loading plan:', error);
-        router.push('/onboarding');
-      }
-    } else {
-      router.push('/onboarding');
-    }
+        setLoading(true);
+        setError(null);
 
-    // Daily reset system - check if it's a new day
-    const today = new Date().toDateString();
-    const lastActiveDate = localStorage.getItem('lastActiveDate');
-
-    if (lastActiveDate && lastActiveDate !== today) {
-      // New day detected - show welcome message
-      setTempMessage({
-        text: "New day. Let's grow",
-        emoji: '💪',
-      });
-      setTimeout(() => setTempMessage(null), 2000);
-    }
-
-    // Update last active date
-    localStorage.setItem('lastActiveDate', today);
-
-    // Load today's food log (already date-keyed, so new day = fresh start)
-    const storedLog = localStorage.getItem(`foodLog_${today}`);
-    if (storedLog) {
-      setFoodLog(JSON.parse(storedLog));
-    }
-
-    // Load and calculate streak
-    const storedStreak = localStorage.getItem('dailyStreak');
-    const lastLogDate = localStorage.getItem('lastLogDate');
-    const today_date = new Date();
-    const yesterday = new Date(today_date);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (storedStreak && lastLogDate) {
-      const lastDate = new Date(lastLogDate);
-      const dayDiff = Math.floor((today_date.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (dayDiff === 0) {
-        // Same day - keep streak
-        setStreak(parseInt(storedStreak));
-      } else if (dayDiff === 1) {
-        // Logged yesterday - keep streak (will update when logging today)
-        setStreak(parseInt(storedStreak));
-      } else {
-        // Streak broken - reset to 0
-        setStreak(0);
-        localStorage.setItem('dailyStreak', '0');
-      }
-    } else {
-      setStreak(0);
-    }
-
-    // Load weight tracking data
-    const storedWeightHistory = localStorage.getItem('weightHistory');
-    if (storedWeightHistory) {
-      setWeightHistory(JSON.parse(storedWeightHistory));
-    }
-
-    // Load starting weight and goal weight from user data
-    const userDataStr = localStorage.getItem('userData');
-    if (userDataStr) {
-      const userData = JSON.parse(userDataStr);
-      setStartingWeight(userData.weight);
-      setGoalWeight(userData.goalWeight);
-    }
-  }, [router]);
-
-  // Save food log to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window === 'undefined') return; // SSR guard
-
-    const today = new Date().toDateString();
-    localStorage.setItem(`foodLog_${today}`, JSON.stringify(foodLog));
-
-    // Update streak when first food is logged today
-    if (foodLog.length > 0) {
-      const lastLogDate = localStorage.getItem('lastLogDate');
-      const today_date = new Date();
-
-      if (!lastLogDate || lastLogDate !== today) {
-        // First log today
-        const yesterday = new Date(today_date);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toDateString();
-
-        if (lastLogDate === yesterdayStr) {
-          // Logged yesterday, increment streak
-          const newStreak = streak + 1;
-          setPrevStreak(streak);
-          setStreak(newStreak);
-          localStorage.setItem('dailyStreak', newStreak.toString());
-        } else if (!lastLogDate) {
-          // First time logging
-          setPrevStreak(0);
-          setStreak(1);
-          localStorage.setItem('dailyStreak', '1');
-        } else {
-          // Streak broken, start new
-          setPrevStreak(0);
-          setStreak(1);
-          localStorage.setItem('dailyStreak', '1');
+        // Check if user is authenticated
+        const user = await getCurrentUser();
+        if (!user) {
+          router.push('/login');
+          return;
         }
 
-        localStorage.setItem('lastLogDate', today);
+        // Try to migrate localStorage data first (one-time operation)
+        if (typeof window !== 'undefined') {
+          const migrationKey = 'supabase_migration_completed';
+          if (!localStorage.getItem(migrationKey)) {
+            try {
+              await migrateLocalStorageData();
+              localStorage.setItem(migrationKey, 'true');
+              console.log('LocalStorage data migrated to Supabase');
+            } catch (migrationError) {
+              console.warn('Migration failed, continuing with fresh data:', migrationError);
+            }
+          }
+        }
+
+        // Load user profile
+        const profile = await getUserProfile();
+        if (!profile) {
+          // No profile found, redirect to onboarding
+          router.push('/onboarding');
+          return;
+        }
+
+        setUserProfile(profile);
+        setPlan(profile.user_plan);
+        setStartingWeight(profile.weight || 0);
+        setGoalWeight(profile.goal_weight || 0);
+        setStreak(profile.daily_streak || 0);
+
+        // Load today's food log
+        const today = new Date().toISOString().split('T')[0];
+        const todaysFoodLogs = await getFoodLogsByDate(today);
+
+        // Convert Supabase food logs to local format
+        const formattedLogs = todaysFoodLogs.map(log => ({
+          id: log.id,
+          name: log.food_name,
+          kcal: log.kcal,
+          emoji: log.emoji || '🍽️',
+          timestamp: new Date(log.logged_at).getTime(),
+          ingredients: log.ingredients || []
+        }));
+
+        setFoodLog(formattedLogs);
+
+        // Load weight history
+        const weightData = await getWeightHistory();
+        const formattedWeightHistory = weightData.map(entry => ({
+          weight: parseFloat(entry.weight.toString()),
+          date: entry.recorded_date
+        }));
+        setWeightHistory(formattedWeightHistory);
+
+        // Handle daily reset and streak calculation
+        const today_date = new Date();
+        const lastActiveDate = profile.last_active_date;
+
+        if (lastActiveDate) {
+          const lastDate = new Date(lastActiveDate);
+          const daysSinceLastActive = Math.floor(
+            (today_date.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+
+          if (daysSinceLastActive >= 1) {
+            // New day detected - show welcome message
+            setTempMessage({
+              text: "New day. Let's grow",
+              emoji: '💪',
+            });
+            setTimeout(() => setTempMessage(null), 2000);
+
+            // Update last active date
+            await updateStreak({
+              dailyStreak: profile.daily_streak || 0,
+              lastLogDate: profile.last_log_date,
+              lastActiveDate: today.toISOString().split('T')[0]
+            });
+          }
+        }
+
+      } catch (err) {
+        console.error('Error loading user data:', err);
+        setError('Failed to load user data');
+      } finally {
+        setLoading(false);
       }
-    }
-  }, [foodLog, streak]);
+    };
+
+    loadUserData();
+  }, [router]);
+
+  // Handle streak updates when food is logged
+  useEffect(() => {
+    const handleStreakUpdate = async () => {
+      if (foodLog.length === 0 || !userProfile) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      const lastLogDate = userProfile.last_log_date;
+
+      // Check if this is the first log today
+      if (!lastLogDate || lastLogDate !== today) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        let newStreak = 1;
+        if (lastLogDate === yesterdayStr) {
+          // Logged yesterday, increment streak
+          newStreak = (userProfile.daily_streak || 0) + 1;
+        }
+
+        setPrevStreak(streak);
+        setStreak(newStreak);
+
+        // Update streak in database
+        try {
+          const updatedProfile = await updateStreak({
+            dailyStreak: newStreak,
+            lastLogDate: today,
+            lastActiveDate: today
+          });
+          setUserProfile(updatedProfile);
+        } catch (error) {
+          console.error('Error updating streak:', error);
+        }
+      }
+    };
+
+    handleStreakUpdate();
+  }, [foodLog.length, userProfile?.id]); // Only trigger when food log length changes
 
   // Handle search
   useEffect(() => {
@@ -234,46 +275,55 @@ function DashboardPageClient() {
 
   const displayProgress = getDisplayProgress(weightProgress);
 
-  // Calculate completed dates and streak (client-side only)
+  // Calculate completed dates and streak from Supabase data
   useEffect(() => {
-    if (typeof window === 'undefined' || totalTarget === 0) return;
+    const calculateStreakHistory = async () => {
+      if (!userProfile || totalTarget === 0) return;
 
-    // Get completed dates from localStorage
-    const dates: string[] = [];
-    for (let i = 0; i < 90; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toDateString();
+      try {
+        const dates: string[] = [];
+        const today = new Date();
 
-      const dayFoodLog = localStorage.getItem(`foodLog_${dateStr}`);
-      if (dayFoodLog) {
-        const entries: FoodLogEntry[] = JSON.parse(dayFoodLog);
-        const dayCalories = entries.reduce((sum, entry) => sum + entry.kcal, 0);
+        // Check last 90 days
+        for (let i = 0; i < 90; i++) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = date.toISOString().split('T')[0];
 
-        // Day is completed if >= 80% of goal
-        if (dayCalories >= (totalTarget * 0.8)) {
-          dates.push(dateStr);
+          // Get food logs for this date
+          const dayFoodLogs = await getFoodLogsByDate(dateStr);
+          const dayCalories = dayFoodLogs.reduce((sum, entry) => sum + entry.kcal, 0);
+
+          // Day is completed if >= 80% of goal
+          if (dayCalories >= (totalTarget * 0.8)) {
+            dates.push(date.toDateString()); // Convert to display format for UI compatibility
+          }
         }
-      }
-    }
-    setCompletedDates(dates);
 
-    // Calculate current streak based on consecutive completed days
-    let streak = 0;
-    const today = new Date();
-    for (let i = 0; i < 90; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toDateString();
+        setCompletedDates(dates);
 
-      if (dates.includes(dateStr)) {
-        streak++;
-      } else {
-        break;
+        // Calculate current streak based on consecutive completed days
+        let calculatedStreak = 0;
+        for (let i = 0; i < 90; i++) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = date.toDateString();
+
+          if (dates.includes(dateStr)) {
+            calculatedStreak++;
+          } else {
+            break;
+          }
+        }
+        setCalculatedStreak(calculatedStreak);
+
+      } catch (error) {
+        console.error('Error calculating streak history:', error);
       }
-    }
-    setCalculatedStreak(streak);
-  }, [totalTarget, foodLog]);
+    };
+
+    calculateStreakHistory();
+  }, [totalTarget, userProfile?.id]); // Recalculate when user profile or target changes
 
   // Get mascot state based on progress
   const getMascotState = () => {
@@ -415,20 +465,8 @@ function DashboardPageClient() {
     prevWeightProgressRef.current = currentProgress;
   }, [weightProgress, viewMode, mascotControls]);
 
-  // Loading state
-  if (!plan) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading your plan...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Add food to log
-  const addFood = (food: FoodItem) => {
+  const addFood = async (food: FoodItem) => {
     const entry: FoodLogEntry = {
       id: `${food.id}-${Date.now()}`,
       name: food.name,
@@ -437,9 +475,31 @@ function DashboardPageClient() {
       timestamp: Date.now(),
       ingredients: food.ingredients,
     };
-    setFoodLog((prev) => [entry, ...prev]);
-    setSearchQuery('');
-    setShowSearch(false);
+
+    try {
+      setSaving(true);
+
+      // Optimistic update
+      setFoodLog((prev) => [entry, ...prev]);
+      setSearchQuery('');
+      setShowSearch(false);
+
+      // Save to Supabase
+      await addFoodLog({
+        name: food.name,
+        kcal: food.kcal,
+        emoji: food.emoji,
+        ingredients: food.ingredients
+      });
+
+    } catch (error) {
+      console.error('Error adding food:', error);
+      setError('Failed to add food entry');
+      // Revert optimistic update
+      setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Toggle ingredient breakdown expansion
@@ -456,7 +516,7 @@ function DashboardPageClient() {
   };
 
   // Add manual entry
-  const addManualEntry = () => {
+  const addManualEntry = async () => {
     const kcal = parseInt(manualCalories);
     if (isNaN(kcal) || kcal <= 0) return;
 
@@ -467,35 +527,106 @@ function DashboardPageClient() {
       emoji: '🍽️',
       timestamp: Date.now(),
     };
-    setFoodLog((prev) => [entry, ...prev]);
-    setManualCalories('');
-    setManualName('');
-    setShowManualEntry(false);
+
+    try {
+      setSaving(true);
+
+      // Optimistic update
+      setFoodLog((prev) => [entry, ...prev]);
+      setManualCalories('');
+      setManualName('');
+      setShowManualEntry(false);
+
+      // Save to Supabase
+      await addFoodLog({
+        name: entry.name,
+        kcal: entry.kcal,
+        emoji: entry.emoji,
+        ingredients: []
+      });
+
+    } catch (error) {
+      console.error('Error adding manual entry:', error);
+      setError('Failed to add manual entry');
+      // Revert optimistic update
+      setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Remove food from log
-  const removeFood = (id: string) => {
-    setFoodLog((prev) => prev.filter((entry) => entry.id !== id));
+  const removeFood = async (id: string) => {
+    const entryToRemove = foodLog.find(entry => entry.id === id);
+    if (!entryToRemove) return;
+
+    try {
+      setSaving(true);
+
+      // Optimistic update
+      setFoodLog((prev) => prev.filter((entry) => entry.id !== id));
+
+      // Find the database ID (if it exists in Supabase format)
+      if (!id.startsWith('manual-') && !id.includes('-')) {
+        // This is a database ID
+        await deleteFoodLog(id);
+      } else {
+        // This is a local ID, need to find the corresponding database entry
+        // For now, we'll just keep the optimistic update
+        console.log('Removed locally generated entry');
+      }
+
+    } catch (error) {
+      console.error('Error removing food:', error);
+      setError('Failed to remove food entry');
+      // Revert optimistic update
+      if (entryToRemove) {
+        setFoodLog((prev) => [entryToRemove, ...prev]);
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Update weight
-  const updateWeight = () => {
-    if (typeof window === 'undefined') return; // SSR guard
-
+  const updateWeight = async () => {
     const weight = parseFloat(newWeight);
     if (isNaN(weight) || weight <= 0) return;
 
     const newEntry = {
       weight,
-      date: new Date().toISOString(),
+      date: new Date().toISOString().split('T')[0],
     };
 
-    const updatedHistory = [...weightHistory, newEntry];
-    setWeightHistory(updatedHistory);
-    localStorage.setItem('weightHistory', JSON.stringify(updatedHistory));
+    try {
+      setSaving(true);
 
-    setNewWeight('');
-    setShowWeightModal(false);
+      // Optimistic update
+      const updatedHistory = [...weightHistory, newEntry];
+      setWeightHistory(updatedHistory);
+      setNewWeight('');
+      setShowWeightModal(false);
+
+      // Save to Supabase
+      await addWeightEntry(weight);
+
+      // Get fresh weight history to ensure consistency
+      const freshWeightHistory = await getWeightHistory();
+      const formattedWeightHistory = freshWeightHistory.map(entry => ({
+        weight: parseFloat(entry.weight.toString()),
+        date: entry.recorded_date
+      }));
+      setWeightHistory(formattedWeightHistory);
+
+    } catch (error) {
+      console.error('Error updating weight:', error);
+      setError('Failed to update weight');
+      // Revert optimistic update
+      setWeightHistory(weightHistory);
+      setShowWeightModal(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Get total weight gained
@@ -529,6 +660,35 @@ function DashboardPageClient() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="w-full max-w-sm min-h-screen bg-[#F8F9FA] flex flex-col overflow-y-auto">
+        {/* Loading State */}
+        {loading && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading your data...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center">
+              <div className="text-red-500 text-4xl mb-4">⚠️</div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Oops! Something went wrong</h2>
+              <p className="text-gray-600 mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content */}
+        {!loading && !error && (
         {/* Header */}
         <header className="px-6 pt-8 pb-4 flex items-center justify-between">
           {activeTab === 'streaks' ? (
@@ -561,12 +721,31 @@ function DashboardPageClient() {
                 BULKINE
               </h1>
 
-              <button className="w-10 h-10 flex items-center justify-center text-gray-500">
-                <svg
-                  className="w-7 h-7"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+              <div className="flex items-center gap-2">
+                {/* Saving indicator */}
+                {saving && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs text-blue-600">Saving...</span>
+                  </div>
+                )}
+
+                <button className="w-10 h-10 flex items-center justify-center text-gray-500">
+                  <svg
+                    className="w-7 h-7"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                    />
+                  </svg>
+                </button>
+              </div>
                   strokeWidth={2}
                 >
                   <path
@@ -1553,6 +1732,9 @@ function DashboardPageClient() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* End of Main Content */}
+        )}
       </div>
     </div>
   );

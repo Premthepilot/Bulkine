@@ -8,6 +8,7 @@ import SelectableCard from '../components/onboarding/SelectableCard';
 import LottieAnimation from '../components/animations/LottieAnimation';
 import { successCheckmark } from '../components/animations/lottieData';
 import { generatePlanFromOnboarding } from '@/lib/diet-engine';
+import { upsertUserProfile, getCurrentUser } from '@/lib/supabase-data';
 
 interface OptionStep {
   id: number;
@@ -142,7 +143,14 @@ export default function SetupPage() {
 
       // Generate the diet plan
       try {
-        // Get onboarding data from localStorage
+        // Check if user is authenticated
+        const user = await getCurrentUser();
+        if (!user) {
+          console.error('User not authenticated');
+          return;
+        }
+
+        // Get onboarding data from localStorage (temporarily, until migration is complete)
         const onboardingDataStr = localStorage.getItem('onboardingData');
         if (onboardingDataStr) {
           const onboardingData = JSON.parse(onboardingDataStr);
@@ -158,9 +166,31 @@ export default function SetupPage() {
           // Generate the plan
           const plan = generatePlanFromOnboarding(completeData);
 
-          // Store the plan
-          localStorage.setItem('userPlan', JSON.stringify(plan));
-          localStorage.setItem('userData', JSON.stringify(completeData));
+          // Prepare profile data for Supabase
+          const profileData = {
+            body_type: completeData.bodyType,
+            main_goal: completeData.mainGoal,
+            workout_frequency: completeData.workoutFrequency,
+            height: completeData.height,
+            weight: completeData.weight,
+            goal_weight: completeData.goalWeight,
+            commitment: completeData.commitment,
+            appetite: completeData.appetite,
+            meals_per_day: completeData.mealsPerDay,
+            diet_preference: completeData.dietPreference,
+            user_plan: plan,
+            daily_streak: 0,
+            last_log_date: null,
+            last_active_date: new Date().toISOString().split('T')[0]
+          };
+
+          // Save to Supabase
+          await upsertUserProfile(profileData);
+
+          // Clean up localStorage after successful save
+          localStorage.removeItem('onboardingData');
+
+          console.log('User profile saved to Supabase successfully');
         }
       } catch (error) {
         console.error('Error generating plan:', error);

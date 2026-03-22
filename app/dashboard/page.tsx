@@ -39,6 +39,10 @@ export default function DashboardPage() {
   // DEV ONLY: Test override for weight progress
   const [testWeightProgress, setTestWeightProgress] = useState<number | null>(null);
 
+  // Streak tracking state (client-side only)
+  const [completedDates, setCompletedDates] = useState<string[]>([]);
+  const [calculatedStreak, setCalculatedStreak] = useState(0);
+
   // Weight tracking state
   const [weightHistory, setWeightHistory] = useState<{ weight: number; date: string }[]>([]);
   const [showWeightModal, setShowWeightModal] = useState(false);
@@ -225,11 +229,12 @@ export default function DashboardPage() {
 
   const displayProgress = getDisplayProgress(weightProgress);
 
-  // Streak calculation logic
-  const getCompletedDates = () => {
-    const completedDates: string[] = [];
+  // Calculate completed dates and streak (client-side only)
+  useEffect(() => {
+    if (typeof window === 'undefined' || totalTarget === 0) return;
 
-    // Check the last 90 days for completed goals
+    // Get completed dates from localStorage
+    const dates: string[] = [];
     for (let i = 0; i < 90; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
@@ -242,37 +247,28 @@ export default function DashboardPage() {
 
         // Day is completed if >= 80% of goal
         if (dayCalories >= (totalTarget * 0.8)) {
-          completedDates.push(dateStr);
+          dates.push(dateStr);
         }
       }
     }
+    setCompletedDates(dates);
 
-    return completedDates;
-  };
-
-  const completedDates = getCompletedDates();
-
-  // Calculate current streak based on consecutive completed days
-  const calculateCurrentStreak = () => {
-    let currentStreak = 0;
+    // Calculate current streak based on consecutive completed days
+    let streak = 0;
     const today = new Date();
-
     for (let i = 0; i < 90; i++) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateStr = date.toDateString();
 
-      if (completedDates.includes(dateStr)) {
-        currentStreak++;
+      if (dates.includes(dateStr)) {
+        streak++;
       } else {
         break;
       }
     }
-
-    return currentStreak;
-  };
-
-  const calculatedStreak = calculateCurrentStreak();
+    setCalculatedStreak(streak);
+  }, [totalTarget, foodLog]);
 
   // Get mascot state based on progress
   const getMascotState = () => {

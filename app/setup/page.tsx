@@ -136,6 +136,8 @@ export default function SetupPage() {
 
   useEffect(() => {
     if (transitionPhase === 'creating') {
+      if (typeof window === 'undefined') return; // SSR guard
+
       setLoadingProgress(0);
 
       // Generate the diet plan

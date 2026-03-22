@@ -215,6 +215,8 @@ export default function OnboardingPage() {
 
     // Handle timeline step - navigate to setup
     if (transitionPhase === 'final') {
+      if (typeof window === 'undefined') return; // SSR guard
+
       // Store onboarding data before navigating to setup
       const onboardingData = {
         bodyType: selections[1],

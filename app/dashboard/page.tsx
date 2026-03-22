@@ -138,7 +138,7 @@ function DashboardPageClient() {
         const todaysFoodLogs = await getFoodLogsByDate(today);
 
         // Convert Supabase food logs to local format
-        const formattedLogs = todaysFoodLogs.map(log => ({
+        const formattedLogs = todaysFoodLogs.map((log: { id: string; food_name: string; kcal: number; emoji: string | null; logged_at: string; ingredients: Ingredient[] | null }) => ({
           id: log.id,
           name: log.food_name,
           kcal: log.kcal,
@@ -151,7 +151,7 @@ function DashboardPageClient() {
 
         // Load weight history
         const weightData = await getWeightHistory();
-        const formattedWeightHistory = weightData.map(entry => ({
+        const formattedWeightHistory = weightData.map((entry: { weight: number | string; recorded_date: string }) => ({
           weight: parseFloat(entry.weight.toString()),
           date: entry.recorded_date
         }));
@@ -292,7 +292,7 @@ function DashboardPageClient() {
 
           // Get food logs for this date
           const dayFoodLogs = await getFoodLogsByDate(dateStr);
-          const dayCalories = dayFoodLogs.reduce((sum, entry) => sum + entry.kcal, 0);
+          const dayCalories = dayFoodLogs.reduce((sum: number, entry: { kcal: number }) => sum + entry.kcal, 0);
 
           // Day is completed if >= 80% of goal
           if (dayCalories >= (totalTarget * 0.8)) {
@@ -612,7 +612,7 @@ function DashboardPageClient() {
 
       // Get fresh weight history to ensure consistency
       const freshWeightHistory = await getWeightHistory();
-      const formattedWeightHistory = freshWeightHistory.map(entry => ({
+      const formattedWeightHistory = freshWeightHistory.map((entry: { weight: number | string; recorded_date: string }) => ({
         weight: parseFloat(entry.weight.toString()),
         date: entry.recorded_date
       }));

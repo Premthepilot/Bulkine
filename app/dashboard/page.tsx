@@ -42,6 +42,7 @@ export default function DashboardPage() {
   // Streak tracking state (client-side only)
   const [completedDates, setCompletedDates] = useState<string[]>([]);
   const [calculatedStreak, setCalculatedStreak] = useState(0);
+  const [isClient, setIsClient] = useState(false);
 
   // Weight tracking state
   const [weightHistory, setWeightHistory] = useState<{ weight: number; date: string }[]>([]);
@@ -58,6 +59,8 @@ export default function DashboardPage() {
 
   // Preload all mascot images to prevent flickering
   useEffect(() => {
+    setIsClient(true); // Mark as client-side
+
     const imagesToPreload = [
       '/mascot/capy-workout.png',
       '/mascot/capy-improving.png',
@@ -74,6 +77,8 @@ export default function DashboardPage() {
 
   // Load plan and food log from localStorage on mount
   useEffect(() => {
+    if (typeof window === 'undefined') return; // SSR guard
+
     const storedPlan = localStorage.getItem('userPlan');
     if (storedPlan) {
       try {
@@ -152,6 +157,8 @@ export default function DashboardPage() {
 
   // Save food log to localStorage whenever it changes
   useEffect(() => {
+    if (typeof window === 'undefined') return; // SSR guard
+
     const today = new Date().toDateString();
     localStorage.setItem(`foodLog_${today}`, JSON.stringify(foodLog));
 
@@ -411,7 +418,7 @@ export default function DashboardPage() {
   }, [weightProgress, viewMode, mascotControls]);
 
   // Loading state
-  if (!plan) {
+  if (!plan || !isClient) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -475,6 +482,8 @@ export default function DashboardPage() {
 
   // Update weight
   const updateWeight = () => {
+    if (typeof window === 'undefined') return; // SSR guard
+
     const weight = parseFloat(newWeight);
     if (isNaN(weight) || weight <= 0) return;
 

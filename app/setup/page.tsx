@@ -191,9 +191,6 @@ export default function SetupPage() {
             // Clean up localStorage after successful save
             localStorage.removeItem('onboardingData');
 
-            // Mark onboarding as complete
-            localStorage.setItem('onboardingComplete', 'true');
-
             console.log('User profile saved to Supabase successfully');
           }
         } catch (error) {

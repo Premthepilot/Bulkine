@@ -98,10 +98,11 @@ function DashboardPageClient() {
         setLoading(true);
         setError(null);
 
-        // Get current user (routing is handled by home page)
+        // Get current user (routing is handled by home page, so user should be authenticated)
         const user = await getCurrentUser();
         if (!user) {
-          setError('Not authenticated');
+          // This should not happen with proper routing, but handle gracefully
+          console.warn('Dashboard accessed without authentication');
           setLoading(false);
           return;
         }
@@ -120,11 +121,11 @@ function DashboardPageClient() {
           }
         }
 
-        // Load user profile
+        // Load user profile (routing is handled by home page, so profile should exist)
         const profile = await getUserProfile();
         if (!profile || !profile.user_plan) {
-          // No profile or plan found
-          setError('No user profile found. Please complete onboarding.');
+          // This should not happen with proper routing, but handle gracefully
+          console.warn('Dashboard accessed without complete profile');
           setLoading(false);
           return;
         }

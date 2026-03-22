@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import Link from "next/link";
 import { supabase } from '@/lib/supabase';
+import { getUserProfile } from '@/lib/supabase-data';
 
 export default function Home() {
   const router = useRouter();
@@ -14,14 +15,23 @@ export default function Home() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        // Check if onboarding is complete
-        const onboardingComplete = localStorage.getItem('onboardingComplete') === 'true';
-        if (onboardingComplete) {
-          router.replace('/dashboard');
-        } else {
+        // User is logged in, check if they have a profile in the database
+        try {
+          const profile = await getUserProfile();
+          if (profile && profile.user_plan) {
+            // Existing user with complete profile → dashboard
+            router.replace('/dashboard');
+          } else {
+            // New user or incomplete profile → onboarding
+            router.replace('/onboarding');
+          }
+        } catch (error) {
+          console.error('Error checking user profile:', error);
+          // If error fetching profile, assume new user
           router.replace('/onboarding');
         }
       } else {
+        // Not logged in → show landing page
         setCheckingSession(false);
       }
     };

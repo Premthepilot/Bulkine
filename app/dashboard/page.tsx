@@ -481,7 +481,8 @@ function DashboardPageClient() {
 
     } catch (error) {
       console.error('Error adding food:', error);
-      setError('Failed to add food entry');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add food entry';
+      setError(errorMessage);
       // Revert optimistic update
       setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
     } finally {
@@ -534,7 +535,8 @@ function DashboardPageClient() {
 
     } catch (error) {
       console.error('Error adding manual entry:', error);
-      setError('Failed to add manual entry');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add manual entry';
+      setError(errorMessage);
       // Revert optimistic update
       setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
     } finally {
@@ -626,18 +628,20 @@ function DashboardPageClient() {
       const { error } = await supabase.auth.signOut();
 
       if (error) {
-        console.error('Logout error:', error);
+        console.error('Logout error:', error.message);
         throw error;
       }
 
-      console.log('Logout successful, redirecting to opening page');
+      console.log('Logout successful, redirecting to home');
 
-      // Redirect to opening page
-      router.replace('/opening');
+      // Redirect to home/opening page
+      router.replace('/');
     } catch (error) {
       console.error('Error during logout:', error);
-      setError('Failed to logout. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to logout';
+      setError(errorMessage);
       setLoggingOut(false);
+      setShowLogoutConfirm(false);
     }
   };
 

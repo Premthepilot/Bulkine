@@ -194,7 +194,10 @@ export default function SetupPage() {
       const result = await upsertUserProfile(profileData);
       console.log('[SetupPage] User profile saved successfully:', result);
 
-      // Clear localStorage data
+      // Save plan to localStorage for dashboard access
+      localStorage.setItem('userPlan', JSON.stringify(plan));
+
+      // Clear onboarding data (no longer needed)
       localStorage.removeItem('onboardingData');
 
       // Navigate to dashboard

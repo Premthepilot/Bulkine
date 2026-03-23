@@ -1,12 +1,14 @@
 -- Bulkine Database Schema for Supabase
 -- This schema handles user data, food logs, and weight history
 
--- 1. User Data Table (simplified)
+-- 1. User Data Table (simplified - EXACT structure required)
 CREATE TABLE IF NOT EXISTS users_data (
-  user_id UUID REFERENCES auth.users(id) PRIMARY KEY,
-  weight DECIMAL(5,2), -- kg
-  calories INTEGER, -- daily calorie target
-  streak INTEGER DEFAULT 1
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) UNIQUE NOT NULL,
+  weight DECIMAL(5,2), -- kg (float8)
+  calories INTEGER, -- daily calorie target (int4)
+  streak INTEGER DEFAULT 1, -- current streak (int4)
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 2. Food Log Table

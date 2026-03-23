@@ -193,11 +193,11 @@ export default function OnboardingPage() {
 
     console.log('Onboarding completed, saving data:', onboardingData);
 
-    // Save to localStorage for next steps
+    // Save to localStorage for setup page
     localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
 
-    // Navigate to creating-plan page
-    router.push('/creating-plan');
+    // Navigate directly to setup page (skip creating-plan and plan-result)
+    router.push('/setup');
   };
 
   // Auto-advance for option screens

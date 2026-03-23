@@ -14,15 +14,17 @@ export default function Home() {
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+
       if (session) {
-        // User is logged in, check if they have a profile in the database
+        // User is logged in, check if they have data in users_data table
         try {
           const profile = await getUserProfile();
-          if (profile && profile.user_plan) {
-            // Existing user with complete profile → dashboard
+
+          if (profile) {
+            // Existing user with profile data → dashboard
             router.replace('/dashboard');
           } else {
-            // New user or incomplete profile → onboarding
+            // New user, no profile data → onboarding
             router.replace('/onboarding');
           }
         } catch (error) {
@@ -35,6 +37,7 @@ export default function Home() {
         setCheckingSession(false);
       }
     };
+
     checkSession();
   }, [router]);
 

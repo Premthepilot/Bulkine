@@ -20,6 +20,7 @@ import {
   getCurrentUser
 } from '@/lib/supabase-data';
 import { supabase } from '@/lib/supabase';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 interface FoodLogEntry {
   id: string;
@@ -99,7 +100,7 @@ function DashboardPageClient() {
   // Set up auth state listener to handle session changes
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         console.log('[Dashboard] Auth state changed:', event, session?.user?.id);
 
         if (event === 'SIGNED_OUT' || !session) {

@@ -135,10 +135,16 @@ export default function SetupPage() {
     setSaveError(null);
 
     try {
+      console.log('[SetupPage] Starting completeSetup...');
+      console.log('[SetupPage] Onboarding data:', JSON.stringify(onboardingData, null, 2));
+      console.log('[SetupPage] Current selections:', JSON.stringify(selections, null, 2));
+
       const user = await getCurrentUser();
+      console.log('[SetupPage] User from getCurrentUser:', user ? { id: user.id, email: user.email } : 'null');
+
       if (!user) {
-        console.error('User not authenticated');
-        setSaveError('User not authenticated');
+        console.error('[SetupPage] User not authenticated');
+        setSaveError('User not authenticated. Please log in again.');
         router.push('/login');
         return;
       }
@@ -158,16 +164,43 @@ export default function SetupPage() {
         workoutTime: selections[4],
       };
 
-      console.log('Complete user data:', completeData);
+      console.log('[SetupPage] Complete user data:', JSON.stringify(completeData, null, 2));
+
+      // Validate required fields
+      const requiredFields = ['bodyType', 'mainGoal', 'height', 'weight', 'goalWeight'];
+      const missingFields = requiredFields.filter(field => completeData[field as keyof typeof completeData] === undefined);
+      if (missingFields.length > 0) {
+        console.error('[SetupPage] Missing required fields:', missingFields);
+        setSaveError(`Missing required data: ${missingFields.join(', ')}`);
+        setIsSaving(false);
+        return;
+      }
 
       // Generate the diet plan
       const plan = generatePlanFromOnboarding(completeData);
-      console.log('Generated plan:', plan);
+      console.log('[SetupPage] Generated plan:', JSON.stringify(plan, null, 2));
 
       // Prepare profile data for Supabase
+      // Note: workout_time is NOT a column in users_data table
+      // Note: Some ENUM values may need to be mapped:
+      //   - main_goal accepts: 'gain-weight', 'build-muscle', 'maintain-weight', 'lose-weight'
+      //   - If user selects 'improve-appetite' or 'stay-consistent', map to closest match
+      const mapMainGoal = (goal: string | undefined): string | undefined => {
+        if (!goal) return undefined;
+        const goalMap: Record<string, string> = {
+          'gain-weight': 'gain-weight',
+          'build-muscle': 'build-muscle',
+          'maintain-weight': 'maintain-weight',
+          'lose-weight': 'lose-weight',
+          'improve-appetite': 'gain-weight', // Map to closest: improve appetite typically for gaining
+          'stay-consistent': 'maintain-weight', // Map to closest: staying consistent = maintenance
+        };
+        return goalMap[goal] || goal;
+      };
+
       const profileData = {
         body_type: completeData.bodyType,
-        main_goal: completeData.mainGoal,
+        main_goal: mapMainGoal(completeData.mainGoal),
         workout_frequency: completeData.workoutFrequency,
         height: completeData.height,
         weight: completeData.weight,
@@ -176,28 +209,29 @@ export default function SetupPage() {
         appetite: completeData.appetite,
         meals_per_day: completeData.mealsPerDay,
         diet_preference: completeData.dietPreference,
-        workout_time: completeData.workoutTime,
+        // workout_time intentionally omitted - column doesn't exist in schema
         user_plan: plan,
         daily_streak: 0,
         last_log_date: null,
         last_active_date: new Date().toISOString().split('T')[0],
       };
 
-      console.log('Saving profile data to Supabase:', profileData);
+      console.log('[SetupPage] Profile data for Supabase:', JSON.stringify(profileData, null, 2));
 
       // Save to Supabase
       const result = await upsertUserProfile(profileData);
-      console.log('User profile saved to Supabase successfully:', result);
+      console.log('[SetupPage] User profile saved successfully:', result);
 
       // Clear localStorage data
       localStorage.removeItem('onboardingData');
 
       // Navigate to dashboard
-      console.log('Setup complete, navigating to dashboard');
+      console.log('[SetupPage] Setup complete, navigating to dashboard');
       router.replace('/dashboard');
     } catch (error) {
-      console.error('Error saving profile to Supabase:', error);
-      setSaveError(error instanceof Error ? error.message : 'Failed to save profile');
+      console.error('[SetupPage] Error saving profile:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setSaveError(errorMessage);
       setIsSaving(false);
     }
   };

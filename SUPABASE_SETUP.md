@@ -93,7 +93,7 @@ The app now supports:
 ## 8. Database Monitoring
 
 Important tables to monitor:
-- `user_profiles`: User account data and settings
+- `users_data`: User account data and settings
 - `food_logs`: Daily food entries (high volume)
 - `weight_history`: Weight tracking data
 

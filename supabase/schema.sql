@@ -7,18 +7,19 @@ ALTER DATABASE postgres SET "app.jwt_secret" TO 'your-jwt-secret';
 -- Create custom types
 DO $$ BEGIN
   CREATE TYPE body_type AS ENUM ('skinny', 'no-results', 'low-appetite');
-  CREATE TYPE main_goal AS ENUM ('gain-weight', 'build-muscle', 'maintain-weight', 'lose-weight');
+  CREATE TYPE main_goal AS ENUM ('gain-weight', 'build-muscle', 'maintain-weight', 'lose-weight', 'improve-appetite', 'stay-consistent');
   CREATE TYPE workout_frequency AS ENUM ('none', '1-2', '3-5', 'daily');
   CREATE TYPE commitment_level AS ENUM ('very-serious', 'serious', 'exploring');
   CREATE TYPE appetite_level AS ENUM ('struggle', 'normal', 'lot');
   CREATE TYPE meals_per_day AS ENUM ('2', '3', '4+');
   CREATE TYPE diet_preference AS ENUM ('vegetarian', 'non-veg', 'eggetarian');
+  CREATE TYPE workout_time AS ENUM ('none', '10-20', '30-45', '60');
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
 -- 1. User Profile Table
-CREATE TABLE IF NOT EXISTS user_profiles (
+CREATE TABLE IF NOT EXISTS users_data (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
 
   -- Onboarding data
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   appetite appetite_level,
   meals_per_day meals_per_day,
   diet_preference diet_preference,
+  workout_time workout_time, -- Added: Time available for workouts
 
   -- User plan (generated diet plan)
   user_plan JSONB,
@@ -85,20 +87,20 @@ CREATE INDEX IF NOT EXISTS idx_food_logs_user_date ON food_logs(user_id, logged_
 CREATE INDEX IF NOT EXISTS idx_weight_history_user_date ON weight_history(user_id, recorded_date DESC);
 
 -- Enable Row Level Security
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE food_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weight_history ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 
 -- User Profiles: Users can only access their own profile
-CREATE POLICY "Users can view own profile" ON user_profiles
+CREATE POLICY "Users can view own profile" ON users_data
   FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "Users can insert own profile" ON user_profiles
+CREATE POLICY "Users can insert own profile" ON users_data
   FOR INSERT WITH CHECK (auth.uid() = id);
 
-CREATE POLICY "Users can update own profile" ON user_profiles
+CREATE POLICY "Users can update own profile" ON users_data
   FOR UPDATE USING (auth.uid() = id);
 
 -- Food Logs: Users can only access their own food logs
@@ -136,9 +138,9 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Trigger to automatically update updated_at on user_profiles
-CREATE TRIGGER update_user_profiles_updated_at
-  BEFORE UPDATE ON user_profiles
+-- Trigger to automatically update updated_at on users_data
+CREATE TRIGGER update_users_data_updated_at
+  BEFORE UPDATE ON users_data
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
@@ -146,7 +148,7 @@ CREATE TRIGGER update_user_profiles_updated_at
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.user_profiles (id)
+  INSERT INTO public.users_data (id)
   VALUES (NEW.id);
   RETURN NEW;
 END;

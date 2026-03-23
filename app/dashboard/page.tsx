@@ -19,6 +19,7 @@ import {
   syncUserData,
   getCurrentUser
 } from '@/lib/supabase-data';
+import { supabase } from '@/lib/supabase';
 
 interface FoodLogEntry {
   id: string;
@@ -68,6 +69,10 @@ function DashboardPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Logout state
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mascotControls = useAnimation();
@@ -629,6 +634,31 @@ function DashboardPageClient() {
       setShowWeightModal(true);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Logout handler
+  const handleLogout = async () => {
+    try {
+      setLoggingOut(true);
+      console.log('Logging out user...');
+
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        console.error('Logout error:', error);
+        throw error;
+      }
+
+      console.log('Logout successful, redirecting to opening page');
+
+      // Redirect to opening page
+      router.replace('/opening');
+    } catch (error) {
+      console.error('Error during logout:', error);
+      setError('Failed to logout. Please try again.');
+      setLoggingOut(false);
     }
   };
 
@@ -1410,6 +1440,81 @@ function DashboardPageClient() {
                 </div>
               </div>
             </div>
+
+            {/* Logout Button */}
+            <div className="mt-6">
+              <button
+                onClick={() => setShowLogoutConfirm(true)}
+                className="w-full py-3.5 bg-white hover:bg-red-50 text-red-600 font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 border-2 border-red-200"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+                Logout
+              </button>
+            </div>
+
+            {/* Logout Confirmation Modal */}
+            <AnimatePresence>
+              {showLogoutConfirm && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
+                  onClick={() => !loggingOut && setShowLogoutConfirm(false)}
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="bg-white rounded-3xl p-6 w-full max-w-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">
+                      Logout?
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Are you sure you want to logout? You can always log back in anytime.
+                    </p>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowLogoutConfirm(false)}
+                        disabled={loggingOut}
+                        className="flex-1 py-3 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        disabled={loggingOut}
+                        className="flex-1 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {loggingOut ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Logging out...
+                          </>
+                        ) : (
+                          'Logout'
+                        )}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Update Weight Modal */}
             <AnimatePresence>

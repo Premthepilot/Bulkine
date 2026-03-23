@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
 import WeightSlider from '../components/onboarding/WeightSlider';
+import { generatePlanFromOnboarding } from '@/lib/diet-engine';
+import { upsertUserProfile, getCurrentUser } from '@/lib/supabase-data';
 
 interface OptionStep {
   id: number;
@@ -127,9 +129,55 @@ const STEPS: Step[] = [
       { id: 'exploring', emoji: '', title: 'Just exploring options' },
     ],
   },
+  // Setup steps (previously in /setup page)
+  {
+    id: 8,
+    type: 'options',
+    title: 'How is your appetite?',
+    subtitle: '',
+    options: [
+      { id: 'struggle', emoji: '', title: 'I struggle to eat' },
+      { id: 'normal', emoji: '', title: 'I eat normally' },
+      { id: 'lot', emoji: '', title: 'I can eat a lot' },
+    ],
+  },
+  {
+    id: 9,
+    type: 'options',
+    title: 'How many meals per day?',
+    subtitle: '',
+    options: [
+      { id: '2', emoji: '', title: '2 meals' },
+      { id: '3', emoji: '', title: '3 meals' },
+      { id: '4+', emoji: '', title: '4+ meals' },
+    ],
+  },
+  {
+    id: 10,
+    type: 'options',
+    title: 'Diet preference?',
+    subtitle: '',
+    options: [
+      { id: 'vegetarian', emoji: '', title: 'Vegetarian' },
+      { id: 'non-veg', emoji: '', title: 'Non-vegetarian' },
+      { id: 'eggetarian', emoji: '', title: 'Eggetarian' },
+    ],
+  },
+  {
+    id: 11,
+    type: 'options',
+    title: 'Time for workouts?',
+    subtitle: '',
+    options: [
+      { id: 'none', emoji: '', title: 'I don\'t work out' },
+      { id: '10-20', emoji: '', title: '10–20 minutes' },
+      { id: '30-45', emoji: '', title: '30–45 minutes' },
+      { id: '60', emoji: '', title: '1 hour' },
+    ],
+  },
 ];
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 11;
 const AUTO_ADVANCE_DELAY = 350;
 
 const pageVariants = {
@@ -213,22 +261,10 @@ export default function OnboardingPage() {
   const handleContinue = () => {
     if (!hasValidSelection) return;
 
-    // Handle timeline step - navigate to setup
+    // Handle final timeline step - go to dashboard (data already saved in creating phase)
     if (transitionPhase === 'final') {
-      if (typeof window === 'undefined') return; // SSR guard
-
-      // Store onboarding data before navigating to setup
-      const onboardingData = {
-        bodyType: selections[1],
-        mainGoal: selections[2],
-        workoutFrequency: selections[3],
-        height: heightValue,
-        weight: currentWeight,
-        goalWeight: goalWeight,
-        commitment: selections[7],
-      };
-      localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
-      router.push('/setup');
+      console.log('Final step: redirecting to dashboard');
+      router.replace('/dashboard');
       return;
     }
 
@@ -263,11 +299,81 @@ export default function OnboardingPage() {
     setIsTransitioning(false);
   }, [currentStep]);
 
-  // Handle creating phase animation
+  // State for tracking save success
+  const [saveCompleted, setSaveCompleted] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Handle creating phase - save data to Supabase
   useEffect(() => {
     if (transitionPhase === 'creating') {
       setLoadingProgress(0);
       setLoadingMessageIndex(0);
+      setSaveCompleted(false);
+      setSaveError(null);
+
+      // Save profile to Supabase
+      const saveProfile = async () => {
+        try {
+          const user = await getCurrentUser();
+          if (!user) {
+            console.error('User not authenticated');
+            setSaveError('User not authenticated');
+            router.push('/login');
+            return;
+          }
+
+          // Combine all onboarding data
+          const completeData = {
+            bodyType: selections[1],
+            mainGoal: selections[2],
+            workoutFrequency: selections[3],
+            height: heightValue,
+            weight: currentWeight,
+            goalWeight: goalWeight,
+            commitment: selections[7],
+            appetite: selections[8],
+            mealsPerDay: selections[9],
+            dietPreference: selections[10],
+            workoutTime: selections[11],
+          };
+
+          console.log('Onboarding form data:', completeData);
+
+          // Generate the diet plan
+          const plan = generatePlanFromOnboarding(completeData);
+          console.log('Generated plan:', plan);
+
+          // Prepare profile data for Supabase
+          const profileData = {
+            body_type: completeData.bodyType,
+            main_goal: completeData.mainGoal,
+            workout_frequency: completeData.workoutFrequency,
+            height: completeData.height,
+            weight: completeData.weight,
+            goal_weight: completeData.goalWeight,
+            commitment: completeData.commitment,
+            appetite: completeData.appetite,
+            meals_per_day: completeData.mealsPerDay,
+            diet_preference: completeData.dietPreference,
+            user_plan: plan,
+            daily_streak: 0,
+            last_log_date: null,
+            last_active_date: new Date().toISOString().split('T')[0]
+          };
+
+          console.log('Saving profile data to Supabase:', profileData);
+
+          // Save to Supabase using upsert
+          const result = await upsertUserProfile(profileData);
+          console.log('User profile saved to Supabase successfully:', result);
+          setSaveCompleted(true);
+        } catch (error) {
+          console.error('Error saving profile to Supabase:', error);
+          setSaveError(error instanceof Error ? error.message : 'Failed to save profile');
+        }
+      };
+
+      saveProfile();
 
       // Progress bar: fill over 3 seconds
       const progressInterval = setInterval(() => {
@@ -284,18 +390,20 @@ export default function OnboardingPage() {
         }, index * 1000);
       });
 
-      // Transition directly to final phase after loading completes
-      const finalTimer = setTimeout(() => {
-        setTransitionPhase('final');
-      }, 3000);
-
       return () => {
         clearInterval(progressInterval);
         messageTimers.forEach(timer => clearTimeout(timer));
-        clearTimeout(finalTimer);
       };
     }
-  }, [transitionPhase]);
+  }, [transitionPhase, selections, heightValue, currentWeight, goalWeight, router]);
+
+  // Transition to final phase only when BOTH progress completes AND save completes
+  useEffect(() => {
+    if (transitionPhase === 'creating' && loadingProgress >= 100 && saveCompleted) {
+      console.log('Save completed and progress done, transitioning to final phase');
+      setTransitionPhase('final');
+    }
+  }, [transitionPhase, loadingProgress, saveCompleted]);
 
   // Animate weight count-up on final (timeline) screen
   useEffect(() => {
@@ -560,16 +668,29 @@ export default function OnboardingPage() {
               className="mb-8"
             >
               <AnimatePresence mode="wait">
-                <motion.p
-                  key={loadingMessageIndex}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="text-orange-500 font-semibold text-sm uppercase tracking-wide"
-                >
-                  {['CALCULATING YOUR CALORIE NEEDS...', 'DESIGNING YOUR DAILY PLAN...', 'OPTIMIZING FOR YOUR BODY...'][loadingMessageIndex]}
-                </motion.p>
+                {saveError ? (
+                  <motion.p
+                    key="error"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-red-500 font-semibold text-sm uppercase tracking-wide"
+                  >
+                    ERROR SAVING DATA. PLEASE TRY AGAIN.
+                  </motion.p>
+                ) : (
+                  <motion.p
+                    key={loadingMessageIndex}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-orange-500 font-semibold text-sm uppercase tracking-wide"
+                  >
+                    {['CALCULATING YOUR CALORIE NEEDS...', 'DESIGNING YOUR DAILY PLAN...', 'OPTIMIZING FOR YOUR BODY...'][loadingMessageIndex]}
+                  </motion.p>
+                )}
               </AnimatePresence>
             </motion.div>
 
@@ -588,29 +709,47 @@ export default function OnboardingPage() {
               </div>
             </motion.div>
 
-            {/* Loading dots */}
+            {/* Loading dots or Retry button */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5, duration: 0.4 }}
               className="flex gap-2"
             >
-              {[0, 1, 2].map((index) => (
-                <motion.div
-                  key={index}
-                  animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.4, 1, 0.4],
+              {saveError ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSaveError(null);
+                    setSaveCompleted(false);
+                    setLoadingProgress(0);
+                    setLoadingMessageIndex(0);
+                    // Re-trigger the save by quickly toggling phase
+                    setTransitionPhase('normal');
+                    setTimeout(() => setTransitionPhase('creating'), 100);
                   }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Infinity,
-                    delay: index * 0.2,
-                    ease: "easeInOut",
-                  }}
-                  className="w-2 h-2 bg-gray-400 rounded-full"
-                />
-              ))}
+                  className="px-6 py-3 bg-orange-500 text-white font-semibold rounded-xl hover:bg-orange-600 transition-colors"
+                >
+                  Try Again
+                </button>
+              ) : (
+                [0, 1, 2].map((index) => (
+                  <motion.div
+                    key={index}
+                    animate={{
+                      scale: [1, 1.2, 1],
+                      opacity: [0.4, 1, 0.4],
+                    }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      delay: index * 0.2,
+                      ease: "easeInOut",
+                    }}
+                    className="w-2 h-2 bg-gray-400 rounded-full"
+                  />
+                ))
+              )}
             </motion.div>
           </motion.div>
         </div>

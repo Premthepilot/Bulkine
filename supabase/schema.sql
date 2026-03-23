@@ -51,7 +51,10 @@ CREATE POLICY "Users can insert own data" ON users_data
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update own data" ON users_data
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own data" ON users_data
+  FOR DELETE USING (auth.uid() = user_id);
 
 -- RLS Policies for food_logs
 CREATE POLICY "Users can view own food logs" ON food_logs
@@ -61,7 +64,7 @@ CREATE POLICY "Users can insert own food logs" ON food_logs
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update own food logs" ON food_logs
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete own food logs" ON food_logs
   FOR DELETE USING (auth.uid() = user_id);
@@ -74,7 +77,7 @@ CREATE POLICY "Users can insert own weight history" ON weight_history
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update own weight history" ON weight_history
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete own weight history" ON weight_history
   FOR DELETE USING (auth.uid() = user_id);

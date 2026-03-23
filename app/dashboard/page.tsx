@@ -103,39 +103,51 @@ function DashboardPageClient() {
         setLoading(true);
         setError(null);
 
-        // Get current user (routing is handled by home page, so user should be authenticated)
+        // Get current user
         const user = await getCurrentUser();
+        console.log('[Dashboard] Current user:', user ? { id: user.id, email: user.email } : 'null');
+
         if (!user) {
-          // This should not happen with proper routing, but handle gracefully
-          console.warn('Dashboard accessed without authentication');
+          console.warn('[Dashboard] No authenticated user');
           setLoading(false);
           return;
         }
 
-        // Load user profile from Supabase (only has: user_id, weight, calories, streak)
+        // Load user profile from Supabase (source of truth for: weight, calories, streak)
         const profile = await getUserProfile();
+        console.log('[Dashboard] Profile from DB:', profile);
 
-        // Load plan and other data from localStorage
+        // Load plan from localStorage (generated client-side)
         const storedPlan = localStorage.getItem('userPlan');
         const storedOnboarding = localStorage.getItem('onboardingData');
         const userPlan = storedPlan ? JSON.parse(storedPlan) : null;
         const onboardingData = storedOnboarding ? JSON.parse(storedOnboarding) : null;
 
-        if (!userPlan) {
-          console.warn('Dashboard accessed without plan data');
+        // If no plan but user has profile, create a basic plan from DB values
+        const effectivePlan = userPlan || (profile ? {
+          targetCalories: profile.calories || 2500,
+          surplus: 300,
+          meals: []
+        } : null);
+
+        if (!effectivePlan && !profile) {
+          console.warn('[Dashboard] No plan or profile data available');
           setLoading(false);
           return;
         }
 
         setUserProfile(profile);
-        setPlan(userPlan);
+        setPlan(effectivePlan);
+
+        // Use database values as source of truth
         setStartingWeight(profile?.weight || onboardingData?.weight || 0);
-        setGoalWeight(onboardingData?.goalWeight || 0);
+        setGoalWeight(onboardingData?.goalWeight || (profile?.weight ? profile.weight + 10 : 70));
         setStreak(profile?.streak || 1);
 
-        // Load today's food log
+        // Load today's food log from Supabase
         const today = new Date().toISOString().split('T')[0];
         const todaysFoodLogs = await getFoodLogsByDate(today);
+        console.log('[Dashboard] Today\'s food logs:', todaysFoodLogs.length, 'entries');
 
         // Convert Supabase food logs to local format
         const formattedLogs = todaysFoodLogs.map((log: { id: string; food_name: string; kcal: number; emoji: string | null; logged_at: string; ingredients: Ingredient[] | null }) => ({
@@ -149,8 +161,10 @@ function DashboardPageClient() {
 
         setFoodLog(formattedLogs);
 
-        // Load weight history
+        // Load weight history from Supabase
         const weightData = await getWeightHistory();
+        console.log('[Dashboard] Weight history:', weightData.length, 'entries');
+
         const formattedWeightHistory = weightData.map((entry: { weight: number | string; recorded_date: string }) => ({
           weight: parseFloat(entry.weight.toString()),
           date: entry.recorded_date
@@ -164,7 +178,6 @@ function DashboardPageClient() {
         const todayStr = today_date.toISOString().split('T')[0];
 
         if (lastVisit !== todayStr) {
-          // New day detected - show welcome message
           setTempMessage({
             text: "New day. Let's grow",
             emoji: '💪',
@@ -174,7 +187,7 @@ function DashboardPageClient() {
         }
 
       } catch (err) {
-        console.error('Error loading user data:', err);
+        console.error('[Dashboard] Error loading user data:', err);
         setError('Failed to load user data');
       } finally {
         setLoading(false);
@@ -472,12 +485,31 @@ function DashboardPageClient() {
       setShowSearch(false);
 
       // Save to Supabase
-      await addFoodLog({
+      const savedEntry = await addFoodLog({
         name: food.name,
         kcal: food.kcal,
         emoji: food.emoji,
         ingredients: food.ingredients
       });
+
+      // Replace optimistic update with real entry from database
+      setFoodLog((prev) => [
+        {
+          id: savedEntry.id,
+          name: savedEntry.food_name,
+          kcal: savedEntry.kcal,
+          emoji: savedEntry.emoji || '🍽️',
+          timestamp: new Date(savedEntry.logged_at).getTime(),
+          ingredients: savedEntry.ingredients || []
+        },
+        ...prev.filter(item => item.id !== entry.id)
+      ]);
+
+      // Refresh user profile to get updated calories
+      const updatedProfile = await getUserProfile();
+      if (updatedProfile) {
+        setUserProfile(updatedProfile);
+      }
 
     } catch (error) {
       console.error('Error adding food:', error);
@@ -526,12 +558,31 @@ function DashboardPageClient() {
       setShowManualEntry(false);
 
       // Save to Supabase
-      await addFoodLog({
+      const savedEntry = await addFoodLog({
         name: entry.name,
         kcal: entry.kcal,
         emoji: entry.emoji,
         ingredients: []
       });
+
+      // Replace optimistic update with real entry from database
+      setFoodLog((prev) => [
+        {
+          id: savedEntry.id,
+          name: savedEntry.food_name,
+          kcal: savedEntry.kcal,
+          emoji: savedEntry.emoji || '🍽️',
+          timestamp: new Date(savedEntry.logged_at).getTime(),
+          ingredients: savedEntry.ingredients || []
+        },
+        ...prev.filter(item => item.id !== entry.id)
+      ]);
+
+      // Refresh user profile to get updated calories
+      const updatedProfile = await getUserProfile();
+      if (updatedProfile) {
+        setUserProfile(updatedProfile);
+      }
 
     } catch (error) {
       console.error('Error adding manual entry:', error);
@@ -555,19 +606,19 @@ function DashboardPageClient() {
       // Optimistic update
       setFoodLog((prev) => prev.filter((entry) => entry.id !== id));
 
-      // Find the database ID (if it exists in Supabase format)
-      if (!id.startsWith('manual-') && !id.includes('-')) {
-        // This is a database ID
-        await deleteFoodLog(id);
-      } else {
-        // This is a local ID, need to find the corresponding database entry
-        // For now, we'll just keep the optimistic update
-        console.log('Removed locally generated entry');
+      // Delete from database
+      await deleteFoodLog(id);
+
+      // Refresh user profile to get updated calories
+      const updatedProfile = await getUserProfile();
+      if (updatedProfile) {
+        setUserProfile(updatedProfile);
       }
 
     } catch (error) {
       console.error('Error removing food:', error);
-      setError('Failed to remove food entry');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove food entry';
+      setError(errorMessage);
       // Revert optimistic update
       if (entryToRemove) {
         setFoodLog((prev) => [entryToRemove, ...prev]);

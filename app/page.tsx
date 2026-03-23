@@ -4,44 +4,34 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import Link from "next/link";
-import { supabase } from '@/lib/supabase';
-import { getUserProfile } from '@/lib/supabase-data';
+import { hasCompletedOnboarding, getUserProfile } from '@/lib/local-storage';
 
 export default function Home() {
   const router = useRouter();
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingStatus, setCheckingStatus] = useState(true);
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    const checkUserStatus = () => {
+      // Check if user has completed onboarding and has profile data
+      const onboardingComplete = hasCompletedOnboarding();
+      const profile = getUserProfile();
 
-      if (session) {
-        // User is logged in, check if they have data in users_data table
-        try {
-          const profile = await getUserProfile();
-
-          if (profile) {
-            // Existing user with profile data → dashboard
-            router.replace('/dashboard');
-          } else {
-            // New user, no profile data → onboarding
-            router.replace('/onboarding');
-          }
-        } catch (error) {
-          console.error('Error checking user profile:', error);
-          // If error fetching profile, assume new user
-          router.replace('/onboarding');
-        }
+      if (onboardingComplete && profile) {
+        // User has completed setup → go to dashboard
+        router.replace('/dashboard');
+      } else if (onboardingComplete) {
+        // User completed onboarding but no profile → go to setup
+        router.replace('/setup');
       } else {
-        // Not logged in → show landing page
-        setCheckingSession(false);
+        // New user → show landing page
+        setCheckingStatus(false);
       }
     };
 
-    checkSession();
+    checkUserStatus();
   }, [router]);
 
-  if (checkingSession) {
+  if (checkingStatus) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface">
         <div className="animate-pulse text-zinc-500">Loading...</div>
@@ -84,19 +74,13 @@ export default function Home() {
         </p>
       </section>
 
-      {/* CTA Buttons */}
+      {/* CTA Button */}
       <footer className="px-8 pb-8 flex flex-col items-center gap-2">
         <Link
-          href="/signup"
+          href="/onboarding"
           className="w-full bg-primary-container text-on-primary font-headline font-bold text-xl py-5 rounded-full shadow-lg shadow-primary-container/20 active:scale-95 transition-transform duration-200 text-center"
         >
           Start Journey
-        </Link>
-        <Link
-          href="/login"
-          className="w-full text-zinc-500 font-medium text-base py-3 hover:text-primary-brand transition-colors text-center"
-        >
-          I already have an account
         </Link>
       </footer>
     </div>

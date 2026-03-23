@@ -9,18 +9,17 @@ import type { WeeklyPlanOutput } from '@/lib/diet-engine';
 import { searchFoods, type FoodItem, type Ingredient } from '@/lib/food-database';
 import {
   getUserProfile,
+  getUserPlan,
+  getOnboardingData,
   getFoodLogsByDate,
-  addFoodLog,
-  deleteFoodLog,
+  addFoodLog as addFoodLogToStorage,
+  deleteFoodLog as deleteFoodLogFromStorage,
   getWeightHistory,
-  addWeightEntry,
-  updateStreak,
-  migrateLocalStorageData,
-  syncUserData,
-  getCurrentUser
-} from '@/lib/supabase-data';
-import { supabase } from '@/lib/supabase';
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+  addWeightEntry as addWeightEntryToStorage,
+  updateStreak as updateStreakInStorage,
+  hasCompletedOnboarding,
+  clearAllData,
+} from '@/lib/local-storage';
 
 interface FoodLogEntry {
   id: string;
@@ -65,15 +64,12 @@ function DashboardPageClient() {
   const [startingWeight, setStartingWeight] = useState(0);
   const [goalWeight, setGoalWeight] = useState(0);
 
-  // Supabase-specific state
+  // Loading state
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
 
-  // Logout state
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
+  // Reset data state
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mascotControls = useAnimation();
@@ -97,55 +93,30 @@ function DashboardPageClient() {
     });
   }, []);
 
-  // Set up auth state listener to handle session changes
+  // Check if user has completed onboarding, redirect if not
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, session: Session | null) => {
-        console.log('[Dashboard] Auth state changed:', event, session?.user?.id);
-
-        if (event === 'SIGNED_OUT' || !session) {
-          console.log('[Dashboard] Session ended, redirecting to login');
-          router.replace('/login');
-        } else if (event === 'TOKEN_REFRESHED') {
-          console.log('[Dashboard] Token refreshed successfully');
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    if (!hasCompletedOnboarding()) {
+      router.replace('/');
+      return;
+    }
   }, [router]);
 
-  // Load user data from Supabase on mount
+  // Load user data from localStorage on mount
   useEffect(() => {
-    const loadUserData = async () => {
+    const loadUserData = () => {
       try {
         setLoading(true);
-        setError(null);
 
-        // Get current user
-        const user = await getCurrentUser();
-        console.log('[Dashboard] Current user:', user ? { id: user.id, email: user.email } : 'null');
-
-        if (!user) {
-          console.warn('[Dashboard] No authenticated user');
-          setLoading(false);
-          return;
-        }
-
-        // Load user profile from Supabase (source of truth for: weight, calories, streak)
-        const profile = await getUserProfile();
-        console.log('[Dashboard] Profile from DB:', profile);
+        // Load user profile from localStorage
+        const profile = getUserProfile();
+        console.log('[Dashboard] Profile from localStorage:', profile);
 
         // Load plan from localStorage (generated client-side)
-        const storedPlan = localStorage.getItem('userPlan');
-        const storedOnboarding = localStorage.getItem('onboardingData');
-        const userPlan = storedPlan ? JSON.parse(storedPlan) : null;
-        const onboardingData = storedOnboarding ? JSON.parse(storedOnboarding) : null;
+        const storedPlan = getUserPlan();
+        const onboardingData = getOnboardingData();
 
-        // If no plan but user has profile, create a basic plan from DB values
-        const effectivePlan = userPlan || (profile ? {
+        // If no plan but user has profile, create a basic plan from stored values
+        const effectivePlan = storedPlan || (profile ? {
           targetCalories: profile.calories || 2500,
           surplus: 300,
           meals: []
@@ -157,21 +128,20 @@ function DashboardPageClient() {
           return;
         }
 
-        setUserProfile(profile);
         setPlan(effectivePlan);
 
-        // Use database values as source of truth
+        // Use stored values as source of truth
         setStartingWeight(profile?.weight || onboardingData?.weight || 0);
-        setGoalWeight(onboardingData?.goalWeight || (profile?.weight ? profile.weight + 10 : 70));
+        setGoalWeight(profile?.goalWeight || onboardingData?.goalWeight || (profile?.weight ? profile.weight + 10 : 70));
         setStreak(profile?.streak || 1);
 
-        // Load today's food log from Supabase
+        // Load today's food log from localStorage
         const today = new Date().toISOString().split('T')[0];
-        const todaysFoodLogs = await getFoodLogsByDate(today);
+        const todaysFoodLogs = getFoodLogsByDate(today);
         console.log('[Dashboard] Today\'s food logs:', todaysFoodLogs.length, 'entries');
 
-        // Convert Supabase food logs to local format
-        const formattedLogs = todaysFoodLogs.map((log: { id: string; food_name: string; kcal: number; emoji: string | null; logged_at: string; ingredients: Ingredient[] | null }) => ({
+        // Convert localStorage food logs to local format
+        const formattedLogs = todaysFoodLogs.map((log) => ({
           id: log.id,
           name: log.food_name,
           kcal: log.kcal,
@@ -182,12 +152,12 @@ function DashboardPageClient() {
 
         setFoodLog(formattedLogs);
 
-        // Load weight history from Supabase
-        const weightData = await getWeightHistory();
+        // Load weight history from localStorage
+        const weightData = getWeightHistory();
         console.log('[Dashboard] Weight history:', weightData.length, 'entries');
 
-        const formattedWeightHistory = weightData.map((entry: { weight: number | string; recorded_date: string }) => ({
-          weight: parseFloat(entry.weight.toString()),
+        const formattedWeightHistory = weightData.map((entry) => ({
+          weight: entry.weight,
           date: entry.recorded_date
         }));
         setWeightHistory(formattedWeightHistory);
@@ -209,18 +179,17 @@ function DashboardPageClient() {
 
       } catch (err) {
         console.error('[Dashboard] Error loading user data:', err);
-        setError('Failed to load user data');
       } finally {
         setLoading(false);
       }
     };
 
     loadUserData();
-  }, []); // Removed router dependency since we're not using redirects
+  }, []);
 
   // Handle streak updates when food is logged
   useEffect(() => {
-    const handleStreakUpdate = async () => {
+    const handleStreakUpdate = () => {
       if (foodLog.length === 0) return;
 
       const today = new Date().toISOString().split('T')[0];
@@ -243,13 +212,8 @@ function DashboardPageClient() {
         setStreak(newStreak);
         localStorage.setItem(lastLogDateKey, today);
 
-        // Update streak in database
-        try {
-          const updatedProfile = await updateStreak(newStreak);
-          setUserProfile(updatedProfile);
-        } catch (error) {
-          console.error('Error updating streak:', error);
-        }
+        // Update streak in localStorage
+        updateStreakInStorage(newStreak);
       }
     };
 
@@ -296,10 +260,10 @@ function DashboardPageClient() {
 
   const displayProgress = getDisplayProgress(weightProgress);
 
-  // Calculate completed dates and streak from Supabase data
+  // Calculate completed dates and streak from localStorage data
   useEffect(() => {
-    const calculateStreakHistory = async () => {
-      if (!userProfile || totalTarget === 0) return;
+    const calculateStreakHistory = () => {
+      if (totalTarget === 0) return;
 
       try {
         const dates: string[] = [];
@@ -312,8 +276,8 @@ function DashboardPageClient() {
           const dateStr = date.toISOString().split('T')[0];
 
           // Get food logs for this date
-          const dayFoodLogs = await getFoodLogsByDate(dateStr);
-          const dayCalories = dayFoodLogs.reduce((sum: number, entry: { kcal: number }) => sum + entry.kcal, 0);
+          const dayFoodLogs = getFoodLogsByDate(dateStr);
+          const dayCalories = dayFoodLogs.reduce((sum, entry) => sum + entry.kcal, 0);
 
           // Day is completed if >= 80% of goal
           if (dayCalories >= (totalTarget * 0.8)) {
@@ -344,7 +308,7 @@ function DashboardPageClient() {
     };
 
     calculateStreakHistory();
-  }, [totalTarget, userProfile?.id]); // Recalculate when user profile or target changes
+  }, [totalTarget, foodLog]); // Recalculate when target or food log changes
 
   // Get mascot state based on progress
   const getMascotState = () => {
@@ -487,7 +451,7 @@ function DashboardPageClient() {
   }, [weightProgress, viewMode, mascotControls]);
 
   // Add food to log
-  const addFood = async (food: FoodItem) => {
+  const addFood = (food: FoodItem) => {
     const entry: FoodLogEntry = {
       id: `${food.id}-${Date.now()}`,
       name: food.name,
@@ -497,50 +461,31 @@ function DashboardPageClient() {
       ingredients: food.ingredients,
     };
 
-    try {
-      setSaving(true);
+    // Add to local state
+    setFoodLog((prev) => [entry, ...prev]);
+    setSearchQuery('');
+    setShowSearch(false);
 
-      // Optimistic update
-      setFoodLog((prev) => [entry, ...prev]);
-      setSearchQuery('');
-      setShowSearch(false);
+    // Save to localStorage
+    const savedEntry = addFoodLogToStorage({
+      food_name: food.name,
+      kcal: food.kcal,
+      emoji: food.emoji,
+      ingredients: food.ingredients || null
+    });
 
-      // Save to Supabase
-      const savedEntry = await addFoodLog({
-        name: food.name,
-        kcal: food.kcal,
-        emoji: food.emoji,
-        ingredients: food.ingredients
-      });
-
-      // Replace optimistic update with real entry from database
-      setFoodLog((prev) => [
-        {
-          id: savedEntry.id,
-          name: savedEntry.food_name,
-          kcal: savedEntry.calories,
-          emoji: savedEntry.emoji || '🍽️',
-          timestamp: new Date(savedEntry.logged_at).getTime(),
-          ingredients: savedEntry.ingredients || []
-        },
-        ...prev.filter(item => item.id !== entry.id)
-      ]);
-
-      // Refresh user profile to get updated calories
-      const updatedProfile = await getUserProfile();
-      if (updatedProfile) {
-        setUserProfile(updatedProfile);
-      }
-
-    } catch (error) {
-      console.error('Error adding food:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add food entry';
-      setError(errorMessage);
-      // Revert optimistic update
-      setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
-    } finally {
-      setSaving(false);
-    }
+    // Update with saved entry ID
+    setFoodLog((prev) => [
+      {
+        id: savedEntry.id,
+        name: savedEntry.food_name,
+        kcal: savedEntry.kcal,
+        emoji: savedEntry.emoji || '🍽️',
+        timestamp: new Date(savedEntry.logged_at).getTime(),
+        ingredients: savedEntry.ingredients || []
+      },
+      ...prev.filter(item => item.id !== entry.id)
+    ]);
   };
 
   // Toggle ingredient breakdown expansion
@@ -557,7 +502,7 @@ function DashboardPageClient() {
   };
 
   // Add manual entry
-  const addManualEntry = async () => {
+  const addManualEntry = () => {
     const kcal = parseInt(manualCalories);
     if (isNaN(kcal) || kcal <= 0) return;
 
@@ -569,88 +514,45 @@ function DashboardPageClient() {
       timestamp: Date.now(),
     };
 
-    try {
-      setSaving(true);
+    // Add to local state
+    setFoodLog((prev) => [entry, ...prev]);
+    setManualCalories('');
+    setManualName('');
+    setShowManualEntry(false);
 
-      // Optimistic update
-      setFoodLog((prev) => [entry, ...prev]);
-      setManualCalories('');
-      setManualName('');
-      setShowManualEntry(false);
+    // Save to localStorage
+    const savedEntry = addFoodLogToStorage({
+      food_name: entry.name,
+      kcal: entry.kcal,
+      emoji: entry.emoji,
+      ingredients: null
+    });
 
-      // Save to Supabase
-      const savedEntry = await addFoodLog({
-        name: entry.name,
-        kcal: entry.kcal,
-        emoji: entry.emoji,
-        ingredients: []
-      });
-
-      // Replace optimistic update with real entry from database
-      setFoodLog((prev) => [
-        {
-          id: savedEntry.id,
-          name: savedEntry.food_name,
-          kcal: savedEntry.kcal,
-          emoji: savedEntry.emoji || '🍽️',
-          timestamp: new Date(savedEntry.logged_at).getTime(),
-          ingredients: savedEntry.ingredients || []
-        },
-        ...prev.filter(item => item.id !== entry.id)
-      ]);
-
-      // Refresh user profile to get updated calories
-      const updatedProfile = await getUserProfile();
-      if (updatedProfile) {
-        setUserProfile(updatedProfile);
-      }
-
-    } catch (error) {
-      console.error('Error adding manual entry:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add manual entry';
-      setError(errorMessage);
-      // Revert optimistic update
-      setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
-    } finally {
-      setSaving(false);
-    }
+    // Update with saved entry ID
+    setFoodLog((prev) => [
+      {
+        id: savedEntry.id,
+        name: savedEntry.food_name,
+        kcal: savedEntry.kcal,
+        emoji: savedEntry.emoji || '🍽️',
+        timestamp: new Date(savedEntry.logged_at).getTime(),
+        ingredients: savedEntry.ingredients || []
+      },
+      ...prev.filter(item => item.id !== entry.id)
+    ]);
   };
 
   // Remove food from log
-  const removeFood = async (id: string) => {
-    const entryToRemove = foodLog.find(entry => entry.id === id);
-    if (!entryToRemove) return;
+  const removeFood = (id: string) => {
+    // Remove from local state
+    setFoodLog((prev) => prev.filter((entry) => entry.id !== id));
 
-    try {
-      setSaving(true);
-
-      // Optimistic update
-      setFoodLog((prev) => prev.filter((entry) => entry.id !== id));
-
-      // Delete from database
-      await deleteFoodLog(id);
-
-      // Refresh user profile to get updated calories
-      const updatedProfile = await getUserProfile();
-      if (updatedProfile) {
-        setUserProfile(updatedProfile);
-      }
-
-    } catch (error) {
-      console.error('Error removing food:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to remove food entry';
-      setError(errorMessage);
-      // Revert optimistic update
-      if (entryToRemove) {
-        setFoodLog((prev) => [entryToRemove, ...prev]);
-      }
-    } finally {
-      setSaving(false);
-    }
+    // Delete from localStorage
+    deleteFoodLogFromStorage(id);
   };
 
   // Update weight
-  const updateWeight = async () => {
+  const updateWeight = () => {
     const weight = parseFloat(newWeight);
     if (isNaN(weight) || weight <= 0) return;
 
@@ -659,62 +561,25 @@ function DashboardPageClient() {
       date: new Date().toISOString().split('T')[0],
     };
 
-    try {
-      setSaving(true);
+    // Update local state
+    const updatedHistory = [...weightHistory, newEntry];
+    setWeightHistory(updatedHistory);
+    setNewWeight('');
+    setShowWeightModal(false);
 
-      // Optimistic update
-      const updatedHistory = [...weightHistory, newEntry];
-      setWeightHistory(updatedHistory);
-      setNewWeight('');
-      setShowWeightModal(false);
-
-      // Save to Supabase
-      await addWeightEntry(weight);
-
-      // Get fresh weight history to ensure consistency
-      const freshWeightHistory = await getWeightHistory();
-      const formattedWeightHistory = freshWeightHistory.map((entry: { weight: number | string; recorded_date: string }) => ({
-        weight: parseFloat(entry.weight.toString()),
-        date: entry.recorded_date
-      }));
-      setWeightHistory(formattedWeightHistory);
-
-    } catch (error) {
-      console.error('Error updating weight:', error);
-      setError('Failed to update weight');
-      // Revert optimistic update
-      setWeightHistory(weightHistory);
-      setShowWeightModal(true);
-    } finally {
-      setSaving(false);
-    }
+    // Save to localStorage
+    addWeightEntryToStorage(weight);
   };
 
-  // Logout handler
-  const handleLogout = async () => {
-    try {
-      setLoggingOut(true);
-      console.log('Logging out user...');
+  // Reset all data handler
+  const handleResetData = () => {
+    setResetting(true);
 
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
+    // Clear all localStorage data
+    clearAllData();
 
-      if (error) {
-        console.error('Logout error:', error.message);
-        throw error;
-      }
-
-      console.log('Logout successful, redirecting to home');
-
-      // Redirect to home/opening page
-      router.replace('/');
-    } catch (error) {
-      console.error('Error during logout:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to logout';
-      setError(errorMessage);
-      setLoggingOut(false);
-      setShowLogoutConfirm(false);
-    }
+    // Redirect to home page
+    router.replace('/');
   };
 
   // Get total weight gained
@@ -758,25 +623,8 @@ function DashboardPageClient() {
           </div>
         )}
 
-        {/* Error State */}
-        {error && !loading && (
-          <div className="flex-1 flex items-center justify-center p-6">
-            <div className="text-center">
-              <div className="text-red-500 text-4xl mb-4">⚠️</div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Oops! Something went wrong</h2>
-              <p className="text-gray-600 mb-4">{error}</p>
-              <button
-                onClick={() => window.location.reload()}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg"
-              >
-                Try Again
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Main Content */}
-        {!loading && !error && (
+        {!loading && (
         <>
         {/* Header */}
         <header className="px-6 pt-8 pb-4 flex items-center justify-between">
@@ -811,14 +659,6 @@ function DashboardPageClient() {
               </h1>
 
               <div className="flex items-center gap-2">
-                {/* Saving indicator */}
-                {saving && (
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-xs text-blue-600">Saving...</span>
-                  </div>
-                )}
-
                 <button className="w-10 h-10 flex items-center justify-center text-gray-500">
                   <svg
                     className="w-7 h-7"
@@ -1496,10 +1336,10 @@ function DashboardPageClient() {
               </div>
             </div>
 
-            {/* Logout Button */}
+            {/* Reset Data Button */}
             <div className="mt-6">
               <button
-                onClick={() => setShowLogoutConfirm(true)}
+                onClick={() => setShowResetConfirm(true)}
                 className="w-full py-3.5 bg-white hover:bg-red-50 text-red-600 font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 border-2 border-red-200"
               >
                 <svg
@@ -1512,22 +1352,22 @@ function DashboardPageClient() {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                   />
                 </svg>
-                Logout
+                Reset All Data
               </button>
             </div>
 
-            {/* Logout Confirmation Modal */}
+            {/* Reset Confirmation Modal */}
             <AnimatePresence>
-              {showLogoutConfirm && (
+              {showResetConfirm && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
-                  onClick={() => !loggingOut && setShowLogoutConfirm(false)}
+                  onClick={() => !resetting && setShowResetConfirm(false)}
                 >
                   <motion.div
                     initial={{ scale: 0.9, opacity: 0 }}
@@ -1537,32 +1377,32 @@ function DashboardPageClient() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <h3 className="text-xl font-bold text-gray-900 mb-2">
-                      Logout?
+                      Reset All Data?
                     </h3>
                     <p className="text-sm text-gray-500 mb-6">
-                      Are you sure you want to logout? You can always log back in anytime.
+                      This will delete all your data including food logs, weight history, and preferences. This action cannot be undone.
                     </p>
 
                     <div className="flex gap-3">
                       <button
-                        onClick={() => setShowLogoutConfirm(false)}
-                        disabled={loggingOut}
+                        onClick={() => setShowResetConfirm(false)}
+                        disabled={resetting}
                         className="flex-1 py-3 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
                       <button
-                        onClick={handleLogout}
-                        disabled={loggingOut}
+                        onClick={handleResetData}
+                        disabled={resetting}
                         className="flex-1 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {loggingOut ? (
+                        {resetting ? (
                           <>
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Logging out...
+                            Resetting...
                           </>
                         ) : (
-                          'Logout'
+                          'Reset'
                         )}
                       </button>
                     </div>

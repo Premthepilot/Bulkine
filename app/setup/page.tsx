@@ -6,7 +6,13 @@ import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
 import { generatePlanFromOnboarding } from '@/lib/diet-engine';
-import { upsertUserProfile, getCurrentUser } from '@/lib/supabase-data';
+import {
+  saveUserProfile,
+  saveUserPlan,
+  getOnboardingData,
+  clearOnboardingData,
+  setOnboardingComplete,
+} from '@/lib/local-storage';
 
 interface OptionStep {
   id: number;
@@ -103,14 +109,14 @@ export default function SetupPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
+  const [onboardingData, setOnboardingDataState] = useState<OnboardingData | null>(null);
   const autoAdvanceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Load onboarding data from localStorage
   useEffect(() => {
-    const savedData = localStorage.getItem('onboardingData');
+    const savedData = getOnboardingData();
     if (savedData) {
-      setOnboardingData(JSON.parse(savedData));
+      setOnboardingDataState(savedData);
     } else {
       // No onboarding data found, redirect back
       console.warn('No onboarding data found, redirecting to onboarding');
@@ -124,8 +130,8 @@ export default function SetupPage() {
   // Check if current step has a valid selection
   const hasValidSelection = selectedOption !== null;
 
-  // Complete setup: combine data, generate plan, save to Supabase
-  const completeSetup = async () => {
+  // Complete setup: combine data, generate plan, save to localStorage
+  const completeSetup = () => {
     if (!onboardingData) {
       setSaveError('Missing onboarding data');
       return;
@@ -138,16 +144,6 @@ export default function SetupPage() {
       console.log('[SetupPage] Starting completeSetup...');
       console.log('[SetupPage] Onboarding data:', JSON.stringify(onboardingData, null, 2));
       console.log('[SetupPage] Current selections:', JSON.stringify(selections, null, 2));
-
-      const user = await getCurrentUser();
-      console.log('[SetupPage] User from getCurrentUser:', user ? { id: user.id, email: user.email } : 'null');
-
-      if (!user) {
-        console.error('[SetupPage] User not authenticated');
-        setSaveError('User not authenticated. Please log in again.');
-        router.push('/login');
-        return;
-      }
 
       // Combine all data
       const completeData = {
@@ -180,25 +176,28 @@ export default function SetupPage() {
       const plan = generatePlanFromOnboarding(completeData);
       console.log('[SetupPage] Generated plan:', JSON.stringify(plan, null, 2));
 
-      // Prepare profile data for Supabase
-      // users_data table only has columns: user_id, weight, calories, streak
+      // Prepare profile data for localStorage
       const profileData = {
         weight: completeData.weight,
-        calories: plan.targetCalories || null,
-        streak: 1
+        calories: plan.targetCalories || 2500,
+        streak: 1,
+        goalWeight: completeData.goalWeight,
+        height: completeData.height,
       };
 
-      console.log('[SetupPage] Profile data for Supabase:', JSON.stringify(profileData, null, 2));
+      console.log('[SetupPage] Profile data:', JSON.stringify(profileData, null, 2));
 
-      // Save to Supabase
-      const result = await upsertUserProfile(profileData);
-      console.log('[SetupPage] User profile saved successfully:', result);
+      // Save to localStorage
+      saveUserProfile(profileData);
 
       // Save plan to localStorage for dashboard access
-      localStorage.setItem('userPlan', JSON.stringify(plan));
+      saveUserPlan(plan);
+
+      // Mark onboarding as complete
+      setOnboardingComplete();
 
       // Clear onboarding data (no longer needed)
-      localStorage.removeItem('onboardingData');
+      clearOnboardingData();
 
       // Navigate to dashboard
       console.log('[SetupPage] Setup complete, navigating to dashboard');

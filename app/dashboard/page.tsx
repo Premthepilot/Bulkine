@@ -96,6 +96,26 @@ function DashboardPageClient() {
     });
   }, []);
 
+  // Set up auth state listener to handle session changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('[Dashboard] Auth state changed:', event, session?.user?.id);
+
+        if (event === 'SIGNED_OUT' || !session) {
+          console.log('[Dashboard] Session ended, redirecting to login');
+          router.replace('/login');
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('[Dashboard] Token refreshed successfully');
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
   // Load user data from Supabase on mount
   useEffect(() => {
     const loadUserData = async () => {
@@ -497,7 +517,7 @@ function DashboardPageClient() {
         {
           id: savedEntry.id,
           name: savedEntry.food_name,
-          kcal: savedEntry.kcal,
+          kcal: savedEntry.calories,
           emoji: savedEntry.emoji || '🍽️',
           timestamp: new Date(savedEntry.logged_at).getTime(),
           ingredients: savedEntry.ingredients || []

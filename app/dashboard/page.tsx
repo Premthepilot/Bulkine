@@ -112,34 +112,26 @@ function DashboardPageClient() {
           return;
         }
 
-        // Try to migrate localStorage data first (one-time operation)
-        if (typeof window !== 'undefined') {
-          const migrationKey = 'supabase_migration_completed';
-          if (!localStorage.getItem(migrationKey)) {
-            try {
-              await migrateLocalStorageData();
-              localStorage.setItem(migrationKey, 'true');
-              console.log('LocalStorage data migrated to Supabase');
-            } catch (migrationError) {
-              console.warn('Migration failed, continuing with fresh data:', migrationError);
-            }
-          }
-        }
-
-        // Load user profile (routing is handled by home page, so profile should exist)
+        // Load user profile from Supabase (only has: user_id, weight, calories, streak)
         const profile = await getUserProfile();
-        if (!profile || !profile.user_plan) {
-          // This should not happen with proper routing, but handle gracefully
-          console.warn('Dashboard accessed without complete profile');
+
+        // Load plan and other data from localStorage
+        const storedPlan = localStorage.getItem('userPlan');
+        const storedOnboarding = localStorage.getItem('onboardingData');
+        const userPlan = storedPlan ? JSON.parse(storedPlan) : null;
+        const onboardingData = storedOnboarding ? JSON.parse(storedOnboarding) : null;
+
+        if (!userPlan) {
+          console.warn('Dashboard accessed without plan data');
           setLoading(false);
           return;
         }
 
         setUserProfile(profile);
-        setPlan(profile.user_plan);
-        setStartingWeight(profile.weight || 0);
-        setGoalWeight(profile.goal_weight || 0);
-        setStreak(profile.daily_streak || 0);
+        setPlan(userPlan);
+        setStartingWeight(profile?.weight || onboardingData?.weight || 0);
+        setGoalWeight(onboardingData?.goalWeight || 0);
+        setStreak(profile?.streak || 1);
 
         // Load today's food log
         const today = new Date().toISOString().split('T')[0];
@@ -165,31 +157,20 @@ function DashboardPageClient() {
         }));
         setWeightHistory(formattedWeightHistory);
 
-        // Handle daily reset and streak calculation
+        // Handle daily reset - show welcome message for new day
         const today_date = new Date();
-        const lastActiveDate = profile.last_active_date;
+        const lastVisitKey = 'lastDashboardVisit';
+        const lastVisit = localStorage.getItem(lastVisitKey);
+        const todayStr = today_date.toISOString().split('T')[0];
 
-        if (lastActiveDate) {
-          const lastDate = new Date(lastActiveDate);
-          const daysSinceLastActive = Math.floor(
-            (today_date.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
-          );
-
-          if (daysSinceLastActive >= 1) {
-            // New day detected - show welcome message
-            setTempMessage({
-              text: "New day. Let's grow",
-              emoji: '💪',
-            });
-            setTimeout(() => setTempMessage(null), 2000);
-
-            // Update last active date
-            await updateStreak({
-              dailyStreak: profile.daily_streak || 0,
-              lastLogDate: profile.last_log_date,
-              lastActiveDate: today
-            });
-          }
+        if (lastVisit !== todayStr) {
+          // New day detected - show welcome message
+          setTempMessage({
+            text: "New day. Let's grow",
+            emoji: '💪',
+          });
+          setTimeout(() => setTempMessage(null), 2000);
+          localStorage.setItem(lastVisitKey, todayStr);
         }
 
       } catch (err) {
@@ -206,10 +187,11 @@ function DashboardPageClient() {
   // Handle streak updates when food is logged
   useEffect(() => {
     const handleStreakUpdate = async () => {
-      if (foodLog.length === 0 || !userProfile) return;
+      if (foodLog.length === 0) return;
 
       const today = new Date().toISOString().split('T')[0];
-      const lastLogDate = userProfile.last_log_date;
+      const lastLogDateKey = 'lastFoodLogDate';
+      const lastLogDate = localStorage.getItem(lastLogDateKey);
 
       // Check if this is the first log today
       if (!lastLogDate || lastLogDate !== today) {
@@ -220,19 +202,16 @@ function DashboardPageClient() {
         let newStreak = 1;
         if (lastLogDate === yesterdayStr) {
           // Logged yesterday, increment streak
-          newStreak = (userProfile.daily_streak || 0) + 1;
+          newStreak = streak + 1;
         }
 
         setPrevStreak(streak);
         setStreak(newStreak);
+        localStorage.setItem(lastLogDateKey, today);
 
         // Update streak in database
         try {
-          const updatedProfile = await updateStreak({
-            dailyStreak: newStreak,
-            lastLogDate: today,
-            lastActiveDate: today
-          });
+          const updatedProfile = await updateStreak(newStreak);
           setUserProfile(updatedProfile);
         } catch (error) {
           console.error('Error updating streak:', error);
@@ -241,7 +220,7 @@ function DashboardPageClient() {
     };
 
     handleStreakUpdate();
-  }, [foodLog.length, userProfile?.id]); // Only trigger when food log length changes
+  }, [foodLog.length]); // Only trigger when food log length changes
 
   // Handle search
   useEffect(() => {

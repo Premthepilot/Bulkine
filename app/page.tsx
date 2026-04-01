@@ -4,41 +4,32 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import Link from "next/link";
-import { supabase } from '@/lib/supabase';
-import { getUserProfile } from '@/lib/supabase-data';
+import { getUserProfile } from '@/lib/local-data';
 
 export default function Home() {
   const router = useRouter();
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    const checkExistingData = async () => {
+      try {
+        // Check if user has existing profile data in localStorage
+        const profile = await getUserProfile();
 
-      if (session) {
-        // User is logged in, check if they have data in users_data table
-        try {
-          const profile = await getUserProfile();
-
-          if (profile) {
-            // Existing user with profile data → dashboard
-            router.replace('/dashboard');
-          } else {
-            // New user, no profile data → onboarding
-            router.replace('/onboarding');
-          }
-        } catch (error) {
-          console.error('Error checking user profile:', error);
-          // If error fetching profile, assume new user
-          router.replace('/onboarding');
+        if (profile) {
+          // Existing user with profile data → dashboard
+          router.replace('/dashboard');
+        } else {
+          // No profile data → show landing page
+          setCheckingSession(false);
         }
-      } else {
-        // Not logged in → show landing page
+      } catch (error) {
+        console.error('Error checking user profile:', error);
         setCheckingSession(false);
       }
     };
 
-    checkSession();
+    checkExistingData();
   }, [router]);
 
   if (checkingSession) {

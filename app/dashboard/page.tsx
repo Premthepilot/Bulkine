@@ -15,12 +15,10 @@ import {
   getWeightHistory,
   addWeightEntry,
   updateStreak,
-  migrateLocalStorageData,
   syncUserData,
-  getCurrentUser
-} from '@/lib/supabase-data';
-import { supabase } from '@/lib/supabase';
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+  getCurrentUser,
+  migrateOldLocalStorage
+} from '@/lib/local-data';
 
 interface FoodLogEntry {
   id: string;
@@ -76,6 +74,7 @@ function DashboardPageClient() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const mascotControls = useAnimation();
   const prevCaloriesRef = useRef<number>(0);
   const prevProgressRef = useRef<number>(0);
@@ -97,34 +96,17 @@ function DashboardPageClient() {
     });
   }, []);
 
-  // Set up auth state listener to handle session changes
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, session: Session | null) => {
-        console.log('[Dashboard] Auth state changed:', event, session?.user?.id);
-
-        if (event === 'SIGNED_OUT' || !session) {
-          console.log('[Dashboard] Session ended, redirecting to login');
-          router.replace('/login');
-        } else if (event === 'TOKEN_REFRESHED') {
-          console.log('[Dashboard] Token refreshed successfully');
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
-
-  // Load user data from Supabase on mount
+  // Load user data from local storage on mount
   useEffect(() => {
     const loadUserData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Get current user
+        // Migrate old localStorage format if needed
+        await migrateOldLocalStorage();
+
+        // Get current user (local)
         const user = await getCurrentUser();
         console.log('[Dashboard] Current user:', user ? { id: user.id, email: user.email } : 'null');
 
@@ -264,6 +246,13 @@ function DashboardPageClient() {
       setSearchResults([]);
     }
   }, [searchQuery]);
+
+  // Auto-focus name input when inline entry opens
+  useEffect(() => {
+    if (showManualEntry && nameInputRef.current) {
+      nameInputRef.current.focus();
+    }
+  }, [showManualEntry]);
 
   // Calculate values
   const totalTarget = plan?.targetCalories || 0;
@@ -696,14 +685,7 @@ function DashboardPageClient() {
       setLoggingOut(true);
       console.log('Logging out user...');
 
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        console.error('Logout error:', error.message);
-        throw error;
-      }
-
+      // For local storage mode, just redirect to home
       console.log('Logout successful, redirecting to home');
 
       // Redirect to home/opening page
@@ -746,7 +728,12 @@ function DashboardPageClient() {
   const mascotState = getMascotState();
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+    <motion.div
+      className="min-h-screen bg-gray-100 flex items-center justify-center"
+      initial={{ x: 100, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.35, ease: "easeInOut" }}
+    >
       <div className="w-full max-w-sm min-h-screen bg-[#F8F9FA] flex flex-col overflow-y-auto">
         {/* Loading State */}
         {loading && (
@@ -1149,19 +1136,18 @@ function DashboardPageClient() {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-lg overflow-hidden z-20"
+                  className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 rounded-2xl shadow-xl overflow-hidden z-20 border border-zinc-800"
                 >
                   {searchResults.map((food) => (
                     <button
                       key={food.id}
                       onClick={() => addFood(food)}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors border-b border-gray-100 last:border-0"
+                      className="w-full flex flex-col items-start px-5 py-4 hover:bg-white/5 active:bg-white/10 transition-all duration-200 border-b border-zinc-800 last:border-0"
                     >
-                      <span className="text-2xl">{food.emoji}</span>
-                      <span className="flex-1 text-left font-medium text-gray-900">
+                      <span className="text-base font-semibold text-white">
                         {food.name}
                       </span>
-                      <span className="text-sm font-bold text-orange-500">
+                      <span className="text-sm text-orange-500 font-medium">
                         {food.kcal} kcal
                       </span>
                     </button>
@@ -1202,91 +1188,108 @@ function DashboardPageClient() {
             </button>
           </div>
 
-          {/* Manual Entry Modal */}
-          <AnimatePresence>
-            {showManualEntry && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
-                onClick={() => setShowManualEntry(false)}
-              >
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  className="bg-white rounded-3xl p-6 w-full max-w-sm"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">
-                    Add calories manually
-                  </h3>
-
-                  <input
-                    type="text"
-                    value={manualName}
-                    onChange={(e) => setManualName(e.target.value)}
-                    placeholder="Food name (optional)"
-                    className="w-full px-4 py-3 bg-gray-100 rounded-xl mb-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-
-                  <input
-                    type="number"
-                    value={manualCalories}
-                    onChange={(e) => setManualCalories(e.target.value)}
-                    placeholder="Calories (kcal)"
-                    className="w-full px-4 py-3 bg-gray-100 rounded-xl mb-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowManualEntry(false)}
-                      className="flex-1 py-3 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={addManualEntry}
-                      disabled={!manualCalories || parseInt(manualCalories) <= 0}
-                      className="flex-1 py-3 rounded-xl font-semibold text-white bg-orange-500 hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Today's Food Log */}
-          {foodLog.length > 0 && (
-            <div className="mt-2">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3">
-                TODAY
-              </h3>
-              <div className="space-y-2">
-                {foodLog.map((entry) => {
-                  const isExpanded = expandedEntries.has(entry.id);
-                  const hasIngredients = entry.ingredients && entry.ingredients.length > 0;
+          <div className="mt-2">
+            <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3">
+              TODAY
+            </h3>
+            <motion.div
+              layout
+              className="space-y-2"
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 25
+              }}
+            >
+              {/* Inline Manual Entry Card */}
+              <AnimatePresence mode="popLayout">
+                {showManualEntry && (
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, x: -40, scale: 0.98 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -40, scale: 0.98 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 25
+                    }}
+                    className="bg-white rounded-2xl overflow-hidden p-4"
+                  >
+                    <div className="flex flex-col gap-3">
+                      <input
+                        ref={nameInputRef}
+                        type="text"
+                        value={manualName}
+                        onChange={(e) => setManualName(e.target.value)}
+                        placeholder="Item name"
+                        className="w-full text-base font-semibold text-gray-900 placeholder-gray-400 bg-transparent border-b border-gray-200 pb-2 focus:outline-none focus:border-orange-500 transition-colors"
+                      />
+                      <input
+                        type="number"
+                        value={manualCalories}
+                        onChange={(e) => setManualCalories(e.target.value)}
+                        placeholder="Enter kcal"
+                        className="w-full text-sm text-orange-500 font-medium placeholder-gray-400 bg-transparent border-b border-gray-200 pb-2 focus:outline-none focus:border-orange-500 transition-colors"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && manualCalories && parseInt(manualCalories) > 0) {
+                            addManualEntry();
+                          }
+                        }}
+                      />
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => {
+                            setShowManualEntry(false);
+                            setManualName('');
+                            setManualCalories('');
+                          }}
+                          className="flex-1 py-2 rounded-xl text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={addManualEntry}
+                          disabled={!manualCalories || parseInt(manualCalories) <= 0}
+                          className="flex-1 py-2 rounded-xl text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Food Log Entries */}
+              <AnimatePresence mode="popLayout">
+              {foodLog.map((entry) => {
+                const isExpanded = expandedEntries.has(entry.id);
+                const hasIngredients = entry.ingredients && entry.ingredients.length > 0;
 
                   return (
                     <motion.div
                       key={entry.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                      className="bg-white rounded-xl overflow-hidden"
+                      layout
+                      initial={{ opacity: 0, x: -40, scale: 0.98 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: 40, scale: 0.98 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 25
+                      }}
+                      className="bg-white rounded-2xl overflow-hidden hover:bg-gray-50 transition-colors"
                     >
                       {/* Main entry row */}
                       <div
-                        className={`flex items-center gap-3 p-3 ${hasIngredients ? 'cursor-pointer' : ''}`}
+                        className={`flex items-center gap-3 p-4 ${hasIngredients ? 'cursor-pointer' : ''}`}
                         onClick={() => hasIngredients && toggleExpanded(entry.id)}
                       >
-                        <span className="text-2xl">{entry.emoji}</span>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{entry.name}</p>
-                          <p className="text-sm text-orange-500 font-semibold">
+                        <div className="flex-1 flex flex-col items-start">
+                          <p className="text-base font-semibold text-gray-900">{entry.name}</p>
+                          <p className="text-sm text-orange-500 font-medium">
                             {entry.kcal} kcal
                           </p>
                         </div>
@@ -1373,12 +1376,12 @@ function DashboardPageClient() {
                     </motion.div>
                   );
                 })}
-              </div>
-            </div>
-          )}
+              </AnimatePresence>
+            </motion.div>
+          </div>
 
-          {/* Empty state */}
-          {foodLog.length === 0 && (
+          {/* Empty state - only show when no entries and not adding */}
+          {foodLog.length === 0 && !showManualEntry && (
             <div className="text-center py-8">
               <p className="text-gray-400 text-sm">
                 No food logged yet today.
@@ -1887,7 +1890,7 @@ function DashboardPageClient() {
         </>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 

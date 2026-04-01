@@ -1,11 +1,28 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
-import WeightSlider from '../components/onboarding/WeightSlider';
+
+// Smooth animated number display component
+function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
+  const spring = useSpring(value, { stiffness: 300, damping: 30 });
+  const display = useTransform(spring, (v) => v.toFixed(decimals));
+  const [displayValue, setDisplayValue] = useState(value.toFixed(decimals));
+
+  useEffect(() => {
+    spring.set(value);
+  }, [spring, value]);
+
+  useEffect(() => {
+    const unsubscribe = display.on('change', (v) => setDisplayValue(v));
+    return unsubscribe;
+  }, [display]);
+
+  return <span className="tabular-nums">{displayValue}</span>;
+}
 
 interface OptionStep {
   id: number;
@@ -55,36 +72,37 @@ const STEPS: Step[] = [
   {
     id: 1,
     type: 'options',
-    title: 'What describes you best?',
+    title: "What's your biggest struggle right now?",
     subtitle: '',
     options: [
-      { id: 'skinny', emoji: '', title: 'Very skinny' },
-      { id: 'no-results', emoji: '', title: 'Tried gym but no results' },
-      { id: 'low-appetite', emoji: '', title: 'Low appetite' },
+      { id: 'cant-gain', emoji: '', title: "I can't gain weight" },
+      { id: 'no-results', emoji: '', title: "I eat but don't see results" },
+      { id: 'low-appetite', emoji: '', title: "I don't feel hungry often" },
+      { id: 'beginner', emoji: '', title: "I'm just starting out" },
     ],
   },
   {
     id: 2,
     type: 'options',
-    title: "What's your main goal?",
+    title: "What's your main focus right now?",
     subtitle: '',
     options: [
       { id: 'gain-weight', emoji: '', title: 'Gain weight' },
       { id: 'build-muscle', emoji: '', title: 'Build muscle' },
-      { id: 'improve-appetite', emoji: '', title: 'Improve appetite' },
-      { id: 'stay-consistent', emoji: '', title: 'Stay consistent' },
+      { id: 'eat-consistently', emoji: '', title: 'Eat more consistently' },
+      { id: 'fix-appetite', emoji: '', title: 'Fix low appetite' },
     ],
   },
   {
     id: 3,
     type: 'options',
-    title: 'How often do you workout?',
+    title: 'How often do you work out?',
     subtitle: '',
     options: [
-      { id: 'none', emoji: '', title: 'I don\'t work out' },
-      { id: '1-2', emoji: '', title: '1–2 times/week' },
-      { id: '3-5', emoji: '', title: '3–5 times/week' },
-      { id: 'daily', emoji: '', title: 'Almost daily' },
+      { id: 'none', emoji: '', title: "I don't work out yet" },
+      { id: '1-2', emoji: '', title: '1–2 times per week' },
+      { id: '3-5', emoji: '', title: '3–5 times per week' },
+      { id: '6+', emoji: '', title: '6+ times per week' },
     ],
   },
   {
@@ -120,12 +138,12 @@ const STEPS: Step[] = [
   {
     id: 7,
     type: 'options',
-    title: 'How serious are you about gaining weight?',
+    title: 'How committed are you right now?',
     subtitle: '',
     options: [
-      { id: 'very-serious', emoji: '', title: "Very serious - I'm all in" },
-      { id: 'serious', emoji: '', title: 'Serious - but need guidance' },
-      { id: 'exploring', emoji: '', title: 'Just exploring options' },
+      { id: 'very-serious', emoji: '', title: "I'm all in — ready to bulk 💪" },
+      { id: 'serious', emoji: '', title: "I'm serious, but need guidance" },
+      { id: 'exploring', emoji: '', title: 'Just getting started' },
     ],
   },
 ];
@@ -135,7 +153,7 @@ const AUTO_ADVANCE_DELAY = 350;
 
 const pageVariants = {
   enter: (direction: number) => ({
-    x: direction > 0 ? 60 : -60,
+    x: direction > 0 ? 80 : -80,
     opacity: 0,
   }),
   center: {
@@ -143,10 +161,16 @@ const pageVariants = {
     opacity: 1,
   },
   exit: (direction: number) => ({
-    x: direction > 0 ? -60 : 60,
+    x: direction > 0 ? -80 : 80,
     opacity: 0,
   }),
 };
+
+// Direction-aware transition settings
+const getPageTransition = (direction: number) => ({
+  duration: direction > 0 ? 0.32 : 0.38,
+  ease: direction > 0 ? [0.32, 0, 0.2, 1] : [0.25, 0.1, 0.25, 1],
+});
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -154,17 +178,70 @@ export default function OnboardingPage() {
   const [direction, setDirection] = useState(1);
   const [selections, setSelections] = useState<Record<number, string>>({});
   const [heightValue, setHeightValue] = useState(170);
+  const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
   const [currentWeight, setCurrentWeight] = useState(60);
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [goalWeight, setGoalWeight] = useState(60);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const autoAdvanceTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // Height conversion functions
+  const cmToFeetInches = (cm: number) => {
+    const totalInches = cm / 2.54;
+    const feet = Math.floor(totalInches / 12);
+    const inches = Math.round(totalInches % 12);
+    return { feet, inches };
+  };
+
+  // Weight conversion functions
+  const kgToLbs = (kg: number) => Math.round(kg * 2.20462 * 10) / 10;
+  const lbsToKg = (lbs: number) => Math.round(lbs / 2.20462 * 10) / 10;
+
   // Sync goal weight when current weight changes (ensure goal >= current)
+  // Also set smart default when first entering goal-weight step
   useEffect(() => {
     if (goalWeight < currentWeight) {
       setGoalWeight(currentWeight);
     }
   }, [currentWeight, goalWeight]);
+
+  // Set smart default goal weight when entering goal-weight step
+  const hasSetSmartDefault = useRef(false);
+  useEffect(() => {
+    if (currentStep === 6 && !hasSetSmartDefault.current) {
+      hasSetSmartDefault.current = true;
+      // Smart default: current weight + 8kg (healthy goal)
+      setGoalWeight(Math.min(currentWeight + 8, 120));
+    }
+  }, [currentStep, currentWeight]);
+
+  // Goal weight category helper - supportive and encouraging
+  const getGainCategory = (gain: number) => {
+    if (gain === 0) return {
+      label: 'Maintain your current weight',
+      bgColor: 'bg-gray-100',
+      textColor: 'text-gray-600',
+      arrowColor: ''
+    };
+    if (gain <= 8) return {
+      label: 'Great starting goal',
+      bgColor: 'bg-green-50',
+      textColor: 'text-green-600',
+      arrowColor: 'text-green-500'
+    };
+    if (gain <= 15) return {
+      label: 'Solid progress target',
+      bgColor: 'bg-orange-50',
+      textColor: 'text-orange-600',
+      arrowColor: 'text-orange-500'
+    };
+    return {
+      label: "Ambitious goal — we'll guide you",
+      bgColor: 'bg-amber-50',
+      textColor: 'text-amber-700',
+      arrowColor: 'text-amber-600'
+    };
+  };
 
   const currentStepData = STEPS.find((s) => s.id === currentStep);
   const selectedOption = selections[currentStep] ?? null;
@@ -193,11 +270,11 @@ export default function OnboardingPage() {
 
     console.log('Onboarding completed, saving data:', onboardingData);
 
-    // Save to localStorage for setup page
+    // Save to localStorage for plan result page
     localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
 
-    // Navigate directly to setup page (skip creating-plan and plan-result)
-    router.push('/setup');
+    // Navigate to plan result page to show summary
+    router.push('/plan-result');
   };
 
   // Auto-advance for option screens
@@ -302,6 +379,9 @@ export default function OnboardingPage() {
 
     if (currentStepData.type === 'height') {
       const percentage = ((heightValue - currentStepData.min) / (currentStepData.max - currentStepData.min)) * 100;
+      const { feet, inches } = cmToFeetInches(heightValue);
+      const minFtIn = cmToFeetInches(currentStepData.min);
+      const maxFtIn = cmToFeetInches(currentStepData.max);
 
       return (
         <motion.div
@@ -310,75 +390,125 @@ export default function OnboardingPage() {
           transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
           className="w-full pt-4"
         >
-          <div className="text-center mb-12">
-            <span className="text-6xl font-bold text-gray-900 tabular-nums">
-              {heightValue}
-            </span>
-            <span className="text-2xl font-medium text-gray-400 ml-2">
-              {currentStepData.unit}
-            </span>
+          {/* Unit Toggle */}
+          <div className="flex justify-center mb-6">
+            <div className="inline-flex bg-gray-100 rounded-full p-1">
+              <button
+                type="button"
+                onClick={() => setHeightUnit('cm')}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  heightUnit === 'cm'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                cm
+              </button>
+              <button
+                type="button"
+                onClick={() => setHeightUnit('ft')}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  heightUnit === 'ft'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ft/in
+              </button>
+            </div>
           </div>
 
+          {/* Height Display with Smooth Animation */}
+          <div className="text-center mb-4">
+            <div className="inline-flex items-baseline">
+              {heightUnit === 'cm' ? (
+                <>
+                  <span className="text-6xl font-bold text-gray-900">
+                    <AnimatedNumber value={heightValue} />
+                  </span>
+                  <span className="text-2xl font-medium text-gray-400 ml-2">
+                    cm
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-6xl font-bold text-gray-900">
+                    <AnimatedNumber value={feet} />
+                  </span>
+                  <span className="text-2xl font-medium text-gray-400 ml-1">
+                    ft
+                  </span>
+                  <span className="text-6xl font-bold text-gray-900 ml-3">
+                    <AnimatedNumber value={inches} />
+                  </span>
+                  <span className="text-2xl font-medium text-gray-400 ml-1">
+                    in
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Helper Text */}
+          <p className="text-center text-sm text-gray-400 mb-10">
+            This helps us calculate your calorie needs
+          </p>
+
+          {/* Smooth Slider */}
           <div className="relative h-12">
-            <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2 bg-gray-200 rounded-full">
-              <div
-                className="h-full bg-orange-500 rounded-full transition-all duration-100"
+            <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-3 bg-gray-200 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-orange-500 rounded-full"
                 style={{ width: `${percentage}%` }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               />
             </div>
 
-            <div
-              className="absolute top-1/2 -translate-y-1/2 pointer-events-none transition-all duration-100"
+            <motion.div
+              className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
               style={{ left: `${percentage}%` }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             >
-              <div className="w-6 h-6 -ml-3 rounded-full bg-orange-500 flex items-center justify-center">
-                <div className="w-2 h-2 bg-white rounded-full" />
+              <div className="w-7 h-7 -ml-3.5 rounded-full bg-orange-500 shadow-lg flex items-center justify-center">
+                <div className="w-2.5 h-2.5 bg-white rounded-full" />
               </div>
-            </div>
+            </motion.div>
 
             <input
               type="range"
               min={currentStepData.min}
               max={currentStepData.max}
+              step={1}
               value={heightValue}
+              onInput={(e) => setHeightValue(Number((e.target as HTMLInputElement).value))}
               onChange={(e) => setHeightValue(Number(e.target.value))}
               className="slider-input absolute inset-0 w-full h-full cursor-pointer opacity-0"
-              aria-label={`Height: ${heightValue} ${currentStepData.unit}`}
+              aria-label={`Height: ${heightUnit === 'cm' ? `${heightValue} cm` : `${feet} ft ${inches} in`}`}
             />
           </div>
 
           <div className="flex justify-between mt-4">
-            <span className="text-sm text-gray-400">{currentStepData.min} cm</span>
-            <span className="text-sm text-gray-400">{currentStepData.max} cm</span>
+            {heightUnit === 'cm' ? (
+              <>
+                <span className="text-sm text-gray-400">{currentStepData.min} cm</span>
+                <span className="text-sm text-gray-400">{currentStepData.max} cm</span>
+              </>
+            ) : (
+              <>
+                <span className="text-sm text-gray-400">{minFtIn.feet}'{minFtIn.inches}"</span>
+                <span className="text-sm text-gray-400">{maxFtIn.feet}'{maxFtIn.inches}"</span>
+              </>
+            )}
           </div>
         </motion.div>
       );
     }
 
     if (currentStepData.type === 'weight') {
-      return (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        >
-          <WeightSlider
-            value={currentWeight}
-            onChange={setCurrentWeight}
-            min={currentStepData.min}
-            max={currentStepData.max}
-            unit={currentStepData.unit}
-          />
-        </motion.div>
-      );
-    }
-
-    if (currentStepData.type === 'goal-weight') {
-      const difference = goalWeight - currentWeight;
-      const differenceText = difference === 0
-        ? 'Maintain current weight'
-        : `+${difference} kg gain`;
-      const percentage = ((goalWeight - currentWeight) / (currentStepData.max - currentWeight)) * 100;
+      const percentage = ((currentWeight - currentStepData.min) / (currentStepData.max - currentStepData.min)) * 100;
+      const displayWeight = weightUnit === 'kg' ? currentWeight : kgToLbs(currentWeight);
+      const minDisplay = weightUnit === 'kg' ? currentStepData.min : kgToLbs(currentStepData.min);
+      const maxDisplay = weightUnit === 'kg' ? currentStepData.max : kgToLbs(currentStepData.max);
 
       return (
         <motion.div
@@ -387,56 +517,168 @@ export default function OnboardingPage() {
           transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
           className="w-full pt-4"
         >
-          <div className="text-center mb-4">
-            <span className="text-6xl font-bold text-gray-900 tabular-nums">
-              {goalWeight}
-            </span>
-            <span className="text-2xl font-medium text-gray-400 ml-2">
-              {currentStepData.unit}
-            </span>
+          {/* Unit Toggle */}
+          <div className="flex justify-center mb-6">
+            <div className="inline-flex bg-gray-100 rounded-full p-1">
+              <button
+                type="button"
+                onClick={() => setWeightUnit('kg')}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  weightUnit === 'kg'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                kg
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeightUnit('lbs')}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  weightUnit === 'lbs'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                lbs
+              </button>
+            </div>
           </div>
 
-          <motion.div
-            key={difference}
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.2 }}
-            className="flex justify-center mb-10"
-          >
-            <span className={`
-              inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold
-              ${difference === 0
-                ? 'bg-gray-100 text-gray-600'
-                : 'bg-green-50 text-green-600'
-              }
-            `}>
-              {difference > 0 && <span className="text-green-500">↑</span>}
-              {differenceText}
-            </span>
-          </motion.div>
+          {/* Weight Display with Smooth Animation */}
+          <div className="text-center mb-4">
+            <div className="inline-flex items-baseline">
+              <span className="text-6xl font-bold text-gray-900">
+                <AnimatedNumber value={displayWeight} decimals={weightUnit === 'lbs' ? 1 : 0} />
+              </span>
+              <span className="text-2xl font-medium text-gray-400 ml-2">
+                {weightUnit}
+              </span>
+            </div>
+          </div>
 
+          {/* Helper Text */}
+          <p className="text-center text-sm text-gray-400 mb-10">
+            This helps us set your calorie target
+          </p>
+
+          {/* Smooth Slider */}
           <div className="relative h-12">
-            <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2 bg-gray-200 rounded-full">
-              <div
-                className="h-full bg-orange-500 rounded-full transition-all duration-100"
+            <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-3 bg-gray-200 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-orange-500 rounded-full"
                 style={{ width: `${percentage}%` }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               />
             </div>
 
-            <div
-              className="absolute top-1/2 -translate-y-1/2 pointer-events-none transition-all duration-100"
+            <motion.div
+              className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
               style={{ left: `${percentage}%` }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             >
-              <div className="w-6 h-6 -ml-3 rounded-full bg-orange-500 flex items-center justify-center">
-                <div className="w-2 h-2 bg-white rounded-full" />
+              <div className="w-7 h-7 -ml-3.5 rounded-full bg-orange-500 shadow-lg flex items-center justify-center">
+                <div className="w-2.5 h-2.5 bg-white rounded-full" />
               </div>
+            </motion.div>
+
+            <input
+              type="range"
+              min={currentStepData.min}
+              max={currentStepData.max}
+              step={0.5}
+              value={currentWeight}
+              onInput={(e) => setCurrentWeight(Number((e.target as HTMLInputElement).value))}
+              onChange={(e) => setCurrentWeight(Number(e.target.value))}
+              className="slider-input absolute inset-0 w-full h-full cursor-pointer opacity-0"
+              aria-label={`Weight: ${displayWeight} ${weightUnit}`}
+            />
+          </div>
+
+          <div className="flex justify-between mt-4">
+            <span className="text-sm text-gray-400">{minDisplay} {weightUnit}</span>
+            <span className="text-sm text-gray-400">{maxDisplay} {weightUnit}</span>
+          </div>
+        </motion.div>
+      );
+    }
+
+    if (currentStepData.type === 'goal-weight') {
+      const difference = goalWeight - currentWeight;
+      const percentage = ((goalWeight - currentWeight) / (currentStepData.max - currentWeight)) * 100;
+      const gainCategory = getGainCategory(difference);
+
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+          className="w-full pt-4"
+        >
+          {/* Goal Weight Display with Smooth Animation */}
+          <div className="text-center mb-4">
+            <div className="inline-flex items-baseline">
+              <span className="text-6xl font-bold text-gray-900">
+                <AnimatedNumber value={goalWeight} />
+              </span>
+              <span className="text-2xl font-medium text-gray-400 ml-2">
+                {currentStepData.unit}
+              </span>
             </div>
+          </div>
+
+          {/* Dynamic Gain Indicator with Supportive Feedback */}
+          <motion.div
+            key={gainCategory.label}
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            className="flex flex-col items-center gap-2 mb-6"
+          >
+            <span className={`
+              inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold
+              ${gainCategory.bgColor} ${gainCategory.textColor}
+            `}>
+              {difference > 0 && <span className={gainCategory.arrowColor}>↑</span>}
+              {difference === 0 ? 'No change' : `+${difference} kg`}
+            </span>
+            <span className={`text-xs font-medium ${gainCategory.textColor}`}>
+              {gainCategory.label}
+            </span>
+          </motion.div>
+
+          {/* Recommendation Text */}
+          <p className="text-center text-sm text-gray-400 mb-8">
+            Recommended gain: 0.25–0.5 kg/week
+          </p>
+
+          {/* Smooth Slider */}
+          <div className="relative h-12">
+            <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-3 bg-gray-200 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-orange-500 rounded-full"
+                style={{ width: `${percentage}%` }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              />
+            </div>
+
+            <motion.div
+              className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ left: `${percentage}%` }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            >
+              <div className="w-7 h-7 -ml-3.5 rounded-full bg-orange-500 shadow-lg flex items-center justify-center">
+                <div className="w-2.5 h-2.5 bg-white rounded-full" />
+              </div>
+            </motion.div>
 
             <input
               type="range"
               min={currentWeight}
               max={currentStepData.max}
+              step={1}
               value={goalWeight}
+              onInput={(e) => setGoalWeight(Number((e.target as HTMLInputElement).value))}
               onChange={(e) => setGoalWeight(Number(e.target.value))}
               className="slider-input absolute inset-0 w-full h-full cursor-pointer opacity-0"
               aria-label={`Goal weight: ${goalWeight} ${currentStepData.unit}`}
@@ -516,10 +758,7 @@ export default function OnboardingPage() {
               initial="enter"
               animate="center"
               exit="exit"
-              transition={{
-                duration: 0.3,
-                ease: [0.4, 0, 0.2, 1],
-              }}
+              transition={getPageTransition(direction)}
             >
               {renderStepContent()}
             </motion.div>

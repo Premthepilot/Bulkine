@@ -40,13 +40,13 @@ export default function CreatingPlanPage() {
     };
   }, []);
 
-  // Navigate to plan-result after loading completes
+  // Navigate to dashboard after loading completes
   useEffect(() => {
     if (loadingProgress >= 100) {
       // Small delay after progress completes before navigation
       const timer = setTimeout(() => {
-        console.log('Creating plan complete, navigating to plan-result');
-        router.replace('/plan-result');
+        console.log('Creating plan complete, navigating to dashboard');
+        router.replace('/dashboard');
       }, 500);
 
       return () => clearTimeout(timer);
@@ -54,8 +54,15 @@ export default function CreatingPlanPage() {
   }, [loadingProgress, router]);
 
   return (
-    <div className="fixed inset-0 h-screen bg-white flex flex-col overflow-hidden">
-      <div className="h-screen flex flex-col items-center justify-center bg-white px-6">
+    <motion.div
+      className="fixed inset-0 h-screen bg-white flex flex-col overflow-hidden"
+      initial={{ x: 0, opacity: 1 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: -100, opacity: 0 }}
+      transition={{ duration: 0.35, ease: "easeInOut" }}
+    >
+      <div className="h-screen flex flex-col items-center justify-center bg-white px-6"
+>
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -145,6 +152,6 @@ export default function CreatingPlanPage() {
           </motion.div>
         </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }

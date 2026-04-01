@@ -81,13 +81,13 @@ export default function PlanResultPage() {
   const estimatedMonths = Math.max(1, Math.ceil(weightGain / 3));
 
   return (
-    <div className="fixed inset-0 h-screen bg-white flex flex-col overflow-hidden">
-      <main className="relative flex-1 overflow-y-auto flex items-center justify-center">
+    <div className="fixed inset-0 min-h-screen bg-white flex flex-col overflow-hidden">
+      <main className="relative flex-1 overflow-y-auto flex items-start justify-center px-6 py-8 pt-12">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4 }}
-          className="flex flex-col items-center justify-center text-center w-full h-full px-6"
+          className="flex flex-col items-center text-center w-full max-w-lg pb-8"
         >
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
@@ -95,10 +95,10 @@ export default function PlanResultPage() {
             transition={{ delay: 0.1, duration: 0.4 }}
             className="text-2xl font-bold text-gray-900 mb-12"
           >
-            Your plan is ready
+            Your personalized plan is ready
           </motion.h1>
 
-          <div className="relative flex items-center justify-center mb-10">
+          <div className="relative flex items-center justify-center mb-6">
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -120,19 +120,32 @@ export default function PlanResultPage() {
             </motion.div>
           </div>
 
+          {/* Plan Explanation */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.9, duration: 0.5 }}
+            className="text-sm text-gray-400 mb-5 max-w-md"
+          >
+            You'll gain weight through a structured calorie surplus, smart meal timing, and consistent tracking.
+          </motion.p>
+
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1, duration: 0.5 }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-orange-100 border border-orange-200"
+            className="inline-flex flex-col items-center gap-1 px-4 py-2 rounded-full bg-orange-100 border border-orange-200 mb-6"
           >
-            <span className="text-orange-500 text-sm">↑</span>
-            <span className="text-sm font-semibold text-orange-600">
-              +{weightGain} kg gain
-            </span>
-            <span className="text-xs text-gray-500">
-              in ~{estimatedMonths} {estimatedMonths === 1 ? 'month' : 'months'}
-            </span>
+            <div className="inline-flex items-center gap-1.5">
+              <span className="text-orange-500 text-sm">↑</span>
+              <span className="text-sm font-semibold text-orange-600">
+                +{weightGain} kg gain
+              </span>
+              <span className="text-xs text-gray-500">
+                in ~{estimatedMonths} {estimatedMonths === 1 ? 'month' : 'months'}
+              </span>
+            </div>
+            <span className="text-xs text-gray-500">Safe and sustainable progress</span>
           </motion.div>
 
           {/* Summary cards */}
@@ -140,7 +153,7 @@ export default function PlanResultPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.2, duration: 0.5 }}
-            className="mt-8 grid grid-cols-2 gap-3 w-full max-w-sm"
+            className="grid grid-cols-2 gap-3 w-full max-w-sm mb-8"
           >
             <div className="bg-gray-50 rounded-xl p-4 text-center">
               <p className="text-sm text-gray-500">Current</p>
@@ -151,18 +164,52 @@ export default function PlanResultPage() {
               <p className="text-xl font-bold text-orange-500">{onboardingData.goalWeight} kg</p>
             </div>
           </motion.div>
+
+          {/* How it works section */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.4, duration: 0.5 }}
+            className="w-full max-w-sm bg-gray-50 rounded-2xl p-6 text-left"
+          >
+            <h2 className="text-lg font-bold text-gray-900 mb-4">How it works</h2>
+            <ul className="space-y-3">
+              <li className="flex items-start gap-3">
+                <span className="text-orange-500 mt-0.5">•</span>
+                <span className="text-sm text-gray-700">Eat in a calorie surplus daily</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-orange-500 mt-0.5">•</span>
+                <span className="text-sm text-gray-700">Track meals and progress</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-orange-500 mt-0.5">•</span>
+                <span className="text-sm text-gray-700">Stay consistent to hit your goal</span>
+              </li>
+            </ul>
+          </motion.div>
         </motion.div>
       </main>
 
       <footer className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-gray-100 px-6 py-6 pb-8">
         <div className="max-w-sm mx-auto">
+          {/* Motivation text */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.6, duration: 0.5 }}
+            className="text-center text-sm text-gray-500 mb-4"
+          >
+            Stay consistent — results will follow
+          </motion.p>
+
           <motion.button
             type="button"
             onClick={handleContinue}
             whileTap={{ scale: 0.98 }}
             className="w-full py-4 px-6 rounded-2xl text-[17px] font-semibold bg-orange-500 text-white hover:bg-orange-600 transition-all duration-200"
           >
-            Continue to setup
+            Start my journey
           </motion.button>
         </div>
       </footer>

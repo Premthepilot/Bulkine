@@ -1,0 +1,182 @@
+================================================================================
+                         BULKINE - PROJECT OVERVIEW
+================================================================================
+
+WHAT IS BULKINE?
+----------------
+A calorie tracking & bulking app designed to help users gain weight through
+personalized meal planning and daily calorie tracking.
+
+
+================================================================================
+                              TECH STACK
+================================================================================
+
+Framework       : Next.js 16.2.0 (App Router, Turbopack)
+Language        : TypeScript
+UI Library      : React 19.2.4
+Styling         : Tailwind CSS 4
+Animations      : Framer Motion, Lottie
+Data Storage    : localStorage (currently active)
+Database        : Supabase (code exists, currently disabled)
+
+
+================================================================================
+                            APP FLOW
+================================================================================
+
+    Landing (/) --> Onboarding --> Setup --> Dashboard
+
+Pages:
+------
+/               : Landing page, checks if user data exists
+/onboarding     : Collects body type, goal, workout frequency, height, weight
+/setup          : Collects appetite, meals/day, diet preference, generates plan
+/creating-plan  : Loading animation while plan generates
+/plan-result    : Shows generated diet plan
+/dashboard      : Main app - food logging, weight tracking, streaks
+/login          : Redirects to onboarding (auth disabled)
+/signup         : Redirects to onboarding (auth disabled)
+
+
+================================================================================
+                          CORE FEATURES
+================================================================================
+
+[DONE] Onboarding Flow
+      - Multi-step data collection
+      - Animated transitions
+      - Progress bar
+
+[DONE] Diet Plan Generation
+      - lib/diet-engine/ calculates TDEE and calorie surplus
+      - Generates meal suggestions based on preferences
+
+[DONE] Food Logging
+      - Add/delete food entries
+      - Calorie tracking per meal
+      - Daily totals
+
+[DONE] Food Search
+      - Built-in food database (lib/food-database.ts)
+      - Search by name
+      - Shows calories and macros
+
+[DONE] Weight Tracking
+      - Log weight entries over time
+      - Weight history visualization
+
+[DONE] Streak System
+      - Tracks daily consistency
+      - Motivational streak counter
+
+[DONE] Progress Visualization
+      - Calorie progress bars
+      - Weight change tracking
+
+[DONE] Data Persistence
+      - Clean localStorage API (lib/local-data.js)
+      - Automatic data migration from old format
+
+[DONE] Responsive UI
+      - Mobile-first design
+      - Dark theme
+
+
+================================================================================
+                          CURRENT STATUS
+================================================================================
+
+COMPLETED:
+----------
+[x] Full onboarding flow with animations
+[x] Diet plan generation engine
+[x] Dashboard with food logging
+[x] Weight tracking system
+[x] Streak system
+[x] Local storage data layer
+[x] Food search database
+[x] Responsive dark theme UI
+
+PAUSED (code exists, disabled for now):
+---------------------------------------
+[ ] Supabase database integration
+[ ] User authentication (login/signup)
+[ ] Cloud data sync
+
+
+================================================================================
+                          FILE STRUCTURE
+================================================================================
+
+bulkine/
+├── app/
+│   ├── page.tsx                    # Landing + routing logic
+│   ├── onboarding/page.tsx         # User info collection
+│   ├── setup/page.tsx              # Plan generation step
+│   ├── creating-plan/page.tsx      # Loading animation
+│   ├── plan-result/page.tsx        # Show generated plan
+│   ├── dashboard/page.tsx          # Main app interface
+│   ├── login/page.tsx              # Redirects to onboarding
+│   ├── signup/page.tsx             # Redirects to onboarding
+│   └── components/
+│       ├── onboarding/             # Onboarding UI components
+│       └── animations/             # Lottie animations
+│
+├── lib/
+│   ├── local-data.js               # localStorage operations (ACTIVE)
+│   ├── supabase-data.js            # Database operations (DISABLED)
+│   ├── supabase.js                 # Supabase client config
+│   ├── food-database.ts            # Food search data
+│   └── diet-engine/
+│       └── index.ts                # Calorie & plan calculations
+│
+├── public/                         # Static assets, images
+├── package.json                    # Dependencies
+└── tailwind.config.ts              # Tailwind configuration
+
+
+================================================================================
+                          DEPENDENCIES
+================================================================================
+
+Production:
+-----------
+next              : 16.2.0
+react             : 19.2.4
+react-dom         : 19.2.4
+framer-motion     : 12.38.0
+lottie-react      : 2.4.1
+@supabase/supabase-js : 2.99.3 (installed but disabled)
+
+Development:
+------------
+typescript        : 5.x
+tailwindcss       : 4.x
+eslint            : 9.x
+
+
+================================================================================
+                          NEXT STEPS (WHEN READY)
+================================================================================
+
+1. Re-enable Supabase database for cloud storage
+2. Add user authentication back (login/signup)
+3. Enable multi-device data sync
+4. Add data export/import feature
+5. Push notifications for meal reminders
+
+
+================================================================================
+                            COMMANDS
+================================================================================
+
+npm run dev       : Start development server
+npm run build     : Build for production
+npm run start     : Start production server
+npm run lint      : Run ESLint
+
+
+================================================================================
+Last Updated: April 2026
+================================================================================

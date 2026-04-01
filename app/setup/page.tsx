@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
 import { generatePlanFromOnboarding } from '@/lib/diet-engine';
-import { upsertUserProfile, getCurrentUser } from '@/lib/supabase-data';
+import { upsertUserProfile, getCurrentUser } from '@/lib/local-data';
 
 interface OptionStep {
   id: number;
@@ -23,23 +23,24 @@ const STEPS: Step[] = [
   {
     id: 1,
     type: 'options',
-    title: 'How is your appetite?',
+    title: 'How would you describe your appetite?',
     subtitle: '',
     options: [
-      { id: 'struggle', emoji: '', title: 'I struggle to eat' },
-      { id: 'normal', emoji: '', title: 'I eat normally' },
-      { id: 'lot', emoji: '', title: 'I can eat a lot' },
+      { id: 'struggle', emoji: '', title: 'I struggle to eat enough' },
+      { id: 'normal', emoji: '', title: 'I eat a moderate amount' },
+      { id: 'lot', emoji: '', title: 'I can eat large portions easily' },
     ],
   },
   {
     id: 2,
     type: 'options',
-    title: 'How many meals per day?',
+    title: 'How often do you eat in a day?',
     subtitle: '',
     options: [
-      { id: '2', emoji: '', title: '2 meals' },
-      { id: '3', emoji: '', title: '3 meals' },
-      { id: '4+', emoji: '', title: '4+ meals' },
+      { id: '1-2', emoji: '', title: '1–2 times' },
+      { id: '2-3', emoji: '', title: '2–3 times' },
+      { id: '3-4', emoji: '', title: '3–4 times' },
+      { id: '4+', emoji: '', title: '4+ times' },
     ],
   },
   {
@@ -56,13 +57,13 @@ const STEPS: Step[] = [
   {
     id: 4,
     type: 'options',
-    title: 'Time for workouts?',
+    title: 'How much time can you spend on workouts?',
     subtitle: '',
     options: [
       { id: 'none', emoji: '', title: "I don't work out" },
       { id: '10-20', emoji: '', title: '10–20 minutes' },
       { id: '30-45', emoji: '', title: '30–45 minutes' },
-      { id: '60', emoji: '', title: '1 hour' },
+      { id: '60+', emoji: '', title: '60+ minutes' },
     ],
   },
 ];
@@ -200,9 +201,9 @@ export default function SetupPage() {
       // Clear onboarding data (no longer needed)
       localStorage.removeItem('onboardingData');
 
-      // Navigate to dashboard
-      console.log('[SetupPage] Setup complete, navigating to dashboard');
-      router.replace('/dashboard');
+      // Navigate to creating-plan screen
+      console.log('[SetupPage] Setup complete, navigating to creating-plan');
+      router.replace('/creating-plan');
     } catch (error) {
       console.error('[SetupPage] Error saving profile:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -337,7 +338,6 @@ export default function SetupPage() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-100 px-6 py-5">
         <div className="max-w-sm mx-auto">
-          <p className="text-xs text-gray-400 font-medium mb-2 text-center">FINAL STEPS</p>
           <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />
         </div>
       </header>

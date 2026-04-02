@@ -29,6 +29,25 @@ interface FoodLogEntry {
   ingredients?: Ingredient[];
 }
 
+// Generate array of months from startDate to future months
+function generateMonthsRange(startDate: Date, currentDate: Date, futureMonths: number = 3) {
+  const months = [];
+  const date = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + futureMonths, 0);
+
+  while (date <= endDate) {
+    months.push({
+      year: date.getFullYear(),
+      month: date.getMonth(),
+      monthName: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      date: new Date(date)
+    });
+    date.setMonth(date.getMonth() + 1);
+  }
+
+  return months;
+}
+
 function DashboardPageClient() {
   const router = useRouter();
   const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
@@ -56,6 +75,9 @@ function DashboardPageClient() {
   const [completedDates, setCompletedDates] = useState<string[]>([]);
   const [calculatedStreak, setCalculatedStreak] = useState(0);
 
+  // Months generation state
+  const [months, setMonths] = useState<Array<{ year: number; month: number; monthName: string; date: Date }>>([]);
+
   // Weight tracking state
   const [weightHistory, setWeightHistory] = useState<{ weight: number; date: string }[]>([]);
   const [showWeightModal, setShowWeightModal] = useState(false);
@@ -73,12 +95,27 @@ function DashboardPageClient() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // Mascot motivational messages rotation
+  const motivationalMessages = [
+    "Your capy buddy is ready for a big meal. Let's fuel up together!",
+    "Time to hit your calories — your buddy is waiting!",
+    "Big gains start with big meals. Let's go!",
+    "Fuel your body, build your strength.",
+    "Consistency today = results tomorrow.",
+    "Let's make today count — one meal at a time.",
+    "You've got this, one calorie at a time!",
+    "Hunger is the best sauce — let's feast!"
+  ];
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const mascotControls = useAnimation();
   const prevCaloriesRef = useRef<number>(0);
   const prevProgressRef = useRef<number>(0);
   const prevWeightProgressRef = useRef<number>(0);
+  const currentMonthRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Preload all mascot images to prevent flickering
   useEffect(() => {
@@ -95,6 +132,20 @@ function DashboardPageClient() {
       }
     });
   }, []);
+
+  // Rotate motivational messages
+  useEffect(() => {
+    // Pick a random message on mount
+    setCurrentMessageIndex(Math.floor(Math.random() * motivationalMessages.length));
+
+    // Set up rotation interval (rotate every 6 seconds)
+    const interval = setInterval(() => {
+      setCurrentMessageIndex((prev) => (prev + 1) % motivationalMessages.length);
+    }, 6000);
+
+    // Cleanup
+    return () => clearInterval(interval);
+  }, [motivationalMessages.length]);
 
   // Load user data from local storage on mount
   useEffect(() => {
@@ -285,7 +336,7 @@ function DashboardPageClient() {
 
   const displayProgress = getDisplayProgress(weightProgress);
 
-  // Calculate completed dates and streak from Supabase data
+  // Calculate completed dates and streak from Supabase data and generate months
   useEffect(() => {
     const calculateStreakHistory = async () => {
       if (!userProfile || totalTarget === 0) return;
@@ -334,6 +385,25 @@ function DashboardPageClient() {
 
     calculateStreakHistory();
   }, [totalTarget, userProfile?.id]); // Recalculate when user profile or target changes
+
+  // Generate months from user creation date to future months
+  useEffect(() => {
+    if (userProfile?.created_at) {
+      const startDate = new Date(userProfile.created_at);
+      const currentDate = new Date();
+      const generatedMonths = generateMonthsRange(startDate, currentDate, 3);
+      setMonths(generatedMonths);
+    }
+  }, [userProfile?.created_at]);
+
+  // Auto-scroll to current month
+  useEffect(() => {
+    if (currentMonthRef.current && scrollContainerRef.current) {
+      setTimeout(() => {
+        currentMonthRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [months]);
 
   // Get mascot state based on progress
   const getMascotState = () => {
@@ -716,12 +786,14 @@ function DashboardPageClient() {
       return { main: "Just getting started", highlight: '' };
     }
 
-    // Daily mode: Based on today's progress
+    // Daily mode: Use rotating messages at lower progress, context-based at higher
     const percentage = (caloriesConsumed / totalTarget) * 100;
     if (percentage >= 100) return { main: 'Amazing work today!', highlight: "You've crushed your goal!" };
     if (percentage >= 75) return { main: 'Almost there!', highlight: 'Keep pushing!' };
     if (percentage >= 50) return { main: 'Halfway there!', highlight: "You're doing great!" };
-    return { main: 'Your capy buddy is ready for a big meal.', highlight: "Let's fuel up together!" };
+
+    // Show rotating messages for early progress
+    return { main: motivationalMessages[currentMessageIndex], highlight: '' };
   };
 
   const motivation = getMotivationText();
@@ -777,22 +849,6 @@ function DashboardPageClient() {
           ) : (
             /* Default Header */
             <>
-              {/* Streak Indicator - hide on streaks page to avoid duplicate */}
-              <motion.div
-                key={streak}
-                initial={{ scale: 1 }}
-                animate={streak > prevStreak ? {
-                  scale: [1, 1.2, 1],
-                  transition: { duration: 0.4, ease: 'easeOut' }
-                } : {}}
-                className="flex items-center gap-2"
-              >
-                <span className="text-2xl">🔥</span>
-                <span className="text-2xl font-bold text-gray-900 tabular-nums">
-                  {streak}
-                </span>
-              </motion.div>
-
               <h1 className="text-2xl font-bold text-orange-600 tracking-tight">
                 BULKINE
               </h1>
@@ -806,21 +862,21 @@ function DashboardPageClient() {
                   </div>
                 )}
 
-                <button className="w-10 h-10 flex items-center justify-center text-gray-500">
-                  <svg
-                    className="w-7 h-7"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                    />
-                  </svg>
-                </button>
+                {/* Streak Indicator */}
+                <motion.div
+                  key={streak}
+                  initial={{ scale: 1 }}
+                  animate={streak > prevStreak ? {
+                    scale: [1, 1.2, 1],
+                    transition: { duration: 0.4, ease: 'easeOut' }
+                  } : {}}
+                  className="flex items-center gap-2 bg-[#f8fafc] px-3 py-1.5 rounded-full border border-gray-200"
+                >
+                  <span className="text-2xl">🔥</span>
+                  <span className="text-2xl font-bold text-gray-900 tabular-nums">
+                    {streak}
+                  </span>
+                </motion.div>
               </div>
             </>
           )}
@@ -977,19 +1033,22 @@ function DashboardPageClient() {
         </div>
 
         {/* Motivation Text */}
-        <div className="px-6 pb-6 text-center">
-          <motion.p
-            key={motivation.main}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="text-lg font-bold text-gray-900 leading-tight"
-          >
-            {motivation.main}{' '}
-            {motivation.highlight && (
-              <span className="text-orange-600">{motivation.highlight}</span>
-            )}
-          </motion.p>
+        <div className="px-6 pb-3 text-center min-h-12 flex items-center justify-center">
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={motivation.main}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.3 }}
+              className="text-lg font-bold text-gray-900 leading-tight"
+            >
+              {motivation.main}{' '}
+              {motivation.highlight && (
+                <span className="text-orange-600">{motivation.highlight}</span>
+              )}
+            </motion.p>
+          </AnimatePresence>
           {viewMode === 'overall' && (
             <motion.div
               initial={{ opacity: 0, y: 5 }}
@@ -1095,12 +1154,12 @@ function DashboardPageClient() {
 
         {/* Food Logging Section */}
         <div className="px-6 pb-6">
-          <h2 className="text-xs font-bold text-gray-400 tracking-widest mb-3">
+          <h2 className="text-xs font-medium text-gray-400 tracking-wide mb-6">
             LOG YOUR FOOD
           </h2>
 
           {/* Search Input */}
-          <div className="relative mb-3">
+          <div className="relative mb-6">
             <div className="relative">
               <input
                 ref={searchInputRef}
@@ -1112,7 +1171,7 @@ function DashboardPageClient() {
                 }}
                 onFocus={() => setShowSearch(true)}
                 placeholder="What did you eat?"
-                className="w-full px-4 py-3.5 pl-11 bg-white rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                className="w-full px-5 py-3 pl-12 bg-gray-100/60 rounded-full text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
               />
               <svg
                 className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2"
@@ -1136,18 +1195,20 @@ function DashboardPageClient() {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 rounded-2xl shadow-xl overflow-hidden z-20 border border-zinc-800"
+                  className="absolute top-full left-0 right-0 mt-3 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-md overflow-hidden z-20"
                 >
-                  {searchResults.map((food) => (
+                  {searchResults.map((food, index) => (
                     <button
                       key={food.id}
                       onClick={() => addFood(food)}
-                      className="w-full flex flex-col items-start px-5 py-4 hover:bg-white/5 active:bg-white/10 transition-all duration-200 border-b border-zinc-800 last:border-0"
+                      className={`w-full flex flex-col items-start px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors ${
+                        index !== searchResults.length - 1 ? 'border-b border-gray-100' : ''
+                      }`}
                     >
-                      <span className="text-base font-semibold text-white">
+                      <span className="text-sm font-medium text-gray-800">
                         {food.name}
                       </span>
-                      <span className="text-sm text-orange-500 font-medium">
+                      <span className="text-xs text-orange-500 font-medium mt-1">
                         {food.kcal} kcal
                       </span>
                     </button>
@@ -1166,10 +1227,10 @@ function DashboardPageClient() {
           </div>
 
           {/* Quick Actions */}
-          <div className="flex gap-2 mb-4">
+          <div className="space-y-4">
             <button
               onClick={() => setShowManualEntry(true)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white rounded-xl text-gray-600 font-medium hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-center gap-3 py-3 text-gray-600 font-medium active:scale-95 transition-all"
             >
               <svg
                 className="w-5 h-5 text-orange-500"
@@ -1189,7 +1250,7 @@ function DashboardPageClient() {
           </div>
 
           {/* Today's Food Log */}
-          <div className="mt-2">
+          <div className="mt-6">
             <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3">
               TODAY
             </h3>
@@ -1637,26 +1698,59 @@ function DashboardPageClient() {
         {/* Streaks Tab Content */}
         {activeTab === 'streaks' && (
           <div className="px-6 pt-4 pb-6 flex-1">
-            {/* Streak Hero Section - Compact */}
+            {/* Streak Hero Section - Minimal & Compact */}
             <div className="mb-6">
-              <div className="bg-white rounded-3xl p-6 text-center shadow-sm">
+              <div className="bg-white rounded-3xl p-4 text-center shadow-sm">
                 {/* Flame + Number Row */}
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.4, ease: 'easeOut' }}
-                  className="flex items-center justify-center gap-3 mb-2"
+                  className="flex items-center justify-center gap-3 mb-1"
                 >
-                  {/* Flame with subtle glow */}
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-orange-400/20 rounded-full blur-xl scale-150" />
-                    <span className="relative text-5xl">🔥</span>
-                  </div>
+                  {/* Flame with pulsing glow */}
+                  <motion.div
+                    className="relative"
+                    animate={{
+                      scale: [1, 1.1, 1],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: 'easeInOut'
+                    }}
+                  >
+                    <motion.div
+                      className="absolute inset-0 rounded-full blur-2xl"
+                      style={{
+                        background: 'radial-gradient(circle, rgba(249, 115, 22, 0.4), rgba(249, 115, 22, 0))',
+                        width: '140%',
+                        height: '140%',
+                        left: '-20%',
+                        top: '-20%',
+                      }}
+                      animate={{
+                        opacity: [0.6, 1, 0.6],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: 'easeInOut'
+                      }}
+                    />
+                    <span className="relative text-6xl block">🔥</span>
+                  </motion.div>
 
                   {/* Streak Number */}
-                  <span className="text-6xl font-black text-gray-900 tracking-tight">
+                  <motion.span
+                    key={calculatedStreak}
+                    initial={{ scale: 0.8 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    className="text-7xl font-black text-gray-900 tracking-tighter leading-none"
+                  >
                     {calculatedStreak}
-                  </span>
+                  </motion.span>
                 </motion.div>
 
                 {/* Streak Label */}
@@ -1664,124 +1758,161 @@ function DashboardPageClient() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.3, delay: 0.1 }}
-                  className="text-lg font-bold text-gray-500 mb-1"
+                  className="text-sm text-gray-500 font-medium"
                 >
                   {calculatedStreak === 1 ? 'Day Streak' : 'Days Streak'}
-                </motion.p>
-
-                {/* Motivational Message */}
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3, delay: 0.2 }}
-                  className="text-base font-semibold text-gray-700"
-                >
-                  {calculatedStreak >= 7
-                    ? "Keep it going ✨"
-                    : calculatedStreak >= 3
-                    ? "Building momentum ✨"
-                    : calculatedStreak >= 1
-                    ? "Great start ✨"
-                    : "Let's start again ✨"
-                  }
                 </motion.p>
               </div>
             </div>
 
-            {/* Calendar */}
-            <div className="bg-white rounded-2xl p-5">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-4 text-center">
-                {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}
+            {/* Multi-Month Calendar - Scrollable */}
+            <div
+              ref={scrollContainerRef}
+              className="space-y-8 pb-6 max-h-[60vh] overflow-y-auto"
+              style={{ scrollBehavior: 'smooth' }}
+            >
+              {months.map((monthData, monthIndex) => {
+                const isCurrentMonth =
+                  monthData.month === new Date().getMonth() &&
+                  monthData.year === new Date().getFullYear();
+
+                return (
+                  <div
+                    key={`${monthData.year}-${monthData.month}`}
+                    ref={isCurrentMonth ? currentMonthRef : undefined}
+                    className="bg-white rounded-2xl p-6 shadow-sm"
+                  >
+                    {/* Month Header */}
+                    <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-5 text-center uppercase sticky top-0 bg-white/95 backdrop-blur py-2 -mx-6 px-6">
+                      {monthData.monthName}
+                    </h3>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-2 mb-6">
+                      {/* Day headers */}
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+                        <div key={index} className="text-center text-xs font-bold text-gray-400 py-2">
+                          {day}
+                        </div>
+                      ))}
+
+                      {/* Calendar days */}
+                      {Array.from({ length: 42 }, (_, index) => {
+                        const firstDay = new Date(monthData.year, monthData.month, 1);
+                        const startCalendar = new Date(firstDay);
+                        startCalendar.setDate(startCalendar.getDate() - firstDay.getDay());
+
+                        const currentDate = new Date(startCalendar);
+                        currentDate.setDate(currentDate.getDate() + index);
+
+                        const isCurrentMonthDay = currentDate.getMonth() === monthData.month;
+                        const isToday = currentDate.toDateString() === new Date().toDateString();
+                        const isCompleted = completedDates.includes(currentDate.toDateString());
+
+                        return (
+                          <motion.button
+                            key={`${monthIndex}-${index}`}
+                            whileHover={{ scale: isCurrentMonthDay ? 1.05 : 1 }}
+                            whileTap={{ scale: isCurrentMonthDay ? 0.95 : 1 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                            className={`
+                              aspect-square flex items-center justify-center text-sm font-semibold rounded-full relative
+                              transition-all duration-200 cursor-pointer
+                              ${!isCurrentMonthDay
+                                ? 'text-gray-300 cursor-default'
+                                : isCompleted
+                                  ? 'bg-orange-500 text-white shadow-md shadow-orange-200'
+                                  : isToday
+                                  ? 'border-2 border-orange-500 text-gray-900 font-bold'
+                                  : 'text-gray-400 hover:text-gray-600'
+                              }
+                            `}
+                          >
+                            {currentDate.getDate()}
+
+                            {/* Completion animation */}
+                            {isCompleted && isCurrentMonthDay && (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                className="absolute inset-0 bg-orange-500 rounded-full"
+                                style={{ zIndex: -1 }}
+                              />
+                            )}
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Calendar Legend - Sticky at bottom of scroll */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm sticky bottom-0">
+                <div className="flex items-center justify-center gap-8 text-xs text-gray-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-orange-500 rounded-full" />
+                    <span>Completed</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 ring-2 ring-orange-500 rounded-full" />
+                    <span>Today</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-gray-300 rounded-full" />
+                    <span>Missed</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* This Week Progress */}
+            <div className="mt-6 bg-white rounded-2xl p-6 shadow-sm">
+              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-4 uppercase">
+                This Week
               </h3>
 
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-1 mb-4">
-                {/* Day headers */}
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
-                  <div key={index} className="text-center text-xs font-bold text-gray-400 py-2">
-                    {day}
+              {/* Weekly progress bar */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(completedDates.slice(0, 7).length / 7) * 100}%` }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                      className="h-full bg-gradient-to-r from-orange-400 to-orange-500 rounded-full"
+                    />
                   </div>
-                ))}
-
-                {/* Calendar days */}
-                {Array.from({ length: 42 }, (_, index) => {
-                  const today = new Date();
-                  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-                  const startCalendar = new Date(firstDay);
-                  startCalendar.setDate(startCalendar.getDate() - firstDay.getDay());
-
-                  const currentDate = new Date(startCalendar);
-                  currentDate.setDate(currentDate.getDate() + index);
-
-                  const isCurrentMonth = currentDate.getMonth() === today.getMonth();
-                  const isToday = currentDate.toDateString() === today.toDateString();
-                  const isCompleted = completedDates.includes(currentDate.toDateString());
-
-                  return (
-                    <div
-                      key={index}
-                      className={`
-                        aspect-square flex items-center justify-center text-sm font-medium rounded-lg relative
-                        ${!isCurrentMonth
-                          ? 'text-gray-300'
-                          : isCompleted
-                            ? 'bg-orange-500 text-white'
-                            : 'text-gray-600'
-                        }
-                        ${isToday ? 'ring-2 ring-orange-300' : ''}
-                      `}
-                    >
-                      {currentDate.getDate()}
-
-                      {/* Completion indicator */}
-                      {isCompleted && isCurrentMonth && (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="absolute inset-0 bg-orange-500 rounded-lg flex items-center justify-center"
-                        >
-                          <span className="text-white font-bold">{currentDate.getDate()}</span>
-                        </motion.div>
-                      )}
-
-                      {/* Today indicator */}
-                      {isToday && !isCompleted && (
-                        <div className="absolute inset-0 rounded-lg ring-2 ring-orange-500 ring-offset-1" />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Legend */}
-              <div className="flex items-center justify-center gap-6 text-xs text-gray-500 border-t border-gray-100 pt-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-orange-500 rounded-full" />
-                  <span>Completed</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 border-2 border-orange-500 rounded-full" />
-                  <span>Today</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-gray-200 rounded-full" />
-                  <span>Missed</span>
-                </div>
+                <span className="text-sm font-bold text-orange-600">
+                  {completedDates.slice(0, 7).length}/7
+                </span>
               </div>
             </div>
 
             {/* Streak Stats */}
             <div className="mt-6 grid grid-cols-2 gap-4">
-              <div className="bg-white rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-orange-500">{completedDates.length}</p>
-                <p className="text-xs text-gray-500 mt-1">Total completed</p>
-              </div>
-              <div className="bg-white rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {Math.round((completedDates.length / Math.min(90, Math.floor((Date.now() - new Date('2024-01-01').getTime()) / (1000 * 60 * 60 * 24)))) * 100) || 0}%
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                className="bg-white rounded-2xl p-5 text-center shadow-sm"
+              >
+                <p className="text-3xl font-black text-orange-500">{calculatedStreak}</p>
+                <p className="text-xs text-gray-500 mt-2 font-medium">Best streak</p>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+                className="bg-white rounded-2xl p-5 text-center shadow-sm"
+              >
+                <p className="text-3xl font-black text-gray-900">
+                  {completedDates.length}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Success rate</p>
-              </div>
+                <p className="text-xs text-gray-500 mt-2 font-medium">Total completed</p>
+              </motion.div>
             </div>
           </div>
         )}

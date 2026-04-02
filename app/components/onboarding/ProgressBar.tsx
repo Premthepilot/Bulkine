@@ -49,8 +49,8 @@ export default function ProgressBar({
       const distance = Math.abs(newStep - prevStep) * stepWidth;
 
       // Update spring configs based on direction
-      position.set(calculatePosition(prevStep), { ...config });
-      width.set(barWidth, { ...config });
+      position.set(calculatePosition(prevStep));
+      width.set(barWidth);
 
       // Phase 1: Stretch to cover both positions
       width.set(barWidth + distance);

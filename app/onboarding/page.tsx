@@ -169,7 +169,6 @@ const pageVariants = {
 // Direction-aware transition settings
 const getPageTransition = (direction: number) => ({
   duration: direction > 0 ? 0.32 : 0.38,
-  ease: direction > 0 ? [0.32, 0, 0.2, 1] : [0.25, 0.1, 0.25, 1],
 });
 
 export default function OnboardingPage() {

@@ -29,23 +29,35 @@ interface FoodLogEntry {
   ingredients?: Ingredient[];
 }
 
-// Generate array of months from startDate to future months
-function generateMonthsRange(startDate: Date, currentDate: Date, futureMonths: number = 3) {
-  const months = [];
-  const date = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + futureMonths, 0);
-
-  while (date <= endDate) {
-    months.push({
-      year: date.getFullYear(),
-      month: date.getMonth(),
-      monthName: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      date: new Date(date)
-    });
-    date.setMonth(date.getMonth() + 1);
+// Get or create mock user start date (temporary until backend connects)
+function getMockUserStartDate(): Date {
+  if (typeof window === 'undefined') {
+    // Server-side: return a default date
+    const date = new Date();
+    date.setMonth(date.getMonth() - 3);
+    return date;
   }
 
-  return months;
+  const stored = localStorage.getItem('mockUserStartDate');
+  if (stored) {
+    return new Date(stored);
+  }
+
+  // Create a mock start date 3 months ago
+  const date = new Date();
+  date.setMonth(date.getMonth() - 3);
+  localStorage.setItem('mockUserStartDate', date.toISOString());
+
+  return date;
+}
+
+// Reset mock start date (dev only)
+function resetMockUserStartDate(): void {
+  if (typeof window !== 'undefined') {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 3);
+    localStorage.setItem('mockUserStartDate', date.toISOString());
+  }
 }
 
 function DashboardPageClient() {
@@ -75,8 +87,8 @@ function DashboardPageClient() {
   const [completedDates, setCompletedDates] = useState<string[]>([]);
   const [calculatedStreak, setCalculatedStreak] = useState(0);
 
-  // Months generation state
-  const [months, setMonths] = useState<Array<{ year: number; month: number; monthName: string; date: Date }>>([]);
+  // Calendar state - single month view
+  const [currentMonth, setCurrentMonth] = useState(new Date());
 
   // Weight tracking state
   const [weightHistory, setWeightHistory] = useState<{ weight: number; date: string }[]>([]);
@@ -114,8 +126,6 @@ function DashboardPageClient() {
   const prevCaloriesRef = useRef<number>(0);
   const prevProgressRef = useRef<number>(0);
   const prevWeightProgressRef = useRef<number>(0);
-  const currentMonthRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Preload all mascot images to prevent flickering
   useEffect(() => {
@@ -388,22 +398,32 @@ function DashboardPageClient() {
 
   // Generate months from user creation date to future months
   useEffect(() => {
-    if (userProfile?.created_at) {
-      const startDate = new Date(userProfile.created_at);
-      const currentDate = new Date();
-      const generatedMonths = generateMonthsRange(startDate, currentDate, 3);
-      setMonths(generatedMonths);
-    }
+    // Use mock start date if backend data not available
+    const startDate = userProfile?.created_at ? new Date(userProfile.created_at) : getMockUserStartDate();
+    // Initialize to current month on load
+    setCurrentMonth(new Date());
   }, [userProfile?.created_at]);
 
-  // Auto-scroll to current month
-  useEffect(() => {
-    if (currentMonthRef.current && scrollContainerRef.current) {
-      setTimeout(() => {
-        currentMonthRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-    }
-  }, [months]);
+  // Navigation handlers for month switching
+  const goToPreviousMonth = () => {
+    setCurrentMonth((prev) => {
+      const newDate = new Date(prev);
+      newDate.setMonth(newDate.getMonth() - 1);
+      return newDate;
+    });
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth((prev) => {
+      const newDate = new Date(prev);
+      newDate.setMonth(newDate.getMonth() + 1);
+      return newDate;
+    });
+  };
+
+  const goToToday = () => {
+    setCurrentMonth(new Date());
+  };
 
   // Get mascot state based on progress
   const getMascotState = () => {
@@ -1765,104 +1785,136 @@ function DashboardPageClient() {
               </div>
             </div>
 
-            {/* Multi-Month Calendar - Scrollable */}
-            <div
-              ref={scrollContainerRef}
-              className="space-y-8 pb-6 max-h-[60vh] overflow-y-auto"
-              style={{ scrollBehavior: 'smooth' }}
-            >
-              {months.map((monthData, monthIndex) => {
-                const isCurrentMonth =
-                  monthData.month === new Date().getMonth() &&
-                  monthData.year === new Date().getFullYear();
-
-                return (
-                  <div
-                    key={`${monthData.year}-${monthData.month}`}
-                    ref={isCurrentMonth ? currentMonthRef : undefined}
-                    className="bg-white rounded-2xl p-6 shadow-sm"
+            {/* Calendar with Navigation */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm">
+              {/* Month Navigation */}
+              <div className="flex items-center justify-between mb-6">
+                <button
+                  onClick={goToPreviousMonth}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+                  aria-label="Previous month"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
                   >
-                    {/* Month Header */}
-                    <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-5 text-center uppercase sticky top-0 bg-white/95 backdrop-blur py-2 -mx-6 px-6">
-                      {monthData.monthName}
-                    </h3>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 19l-7-7 7-7"
+                    />
+                  </svg>
+                </button>
 
-                    {/* Calendar Grid */}
-                    <div className="grid grid-cols-7 gap-2 mb-6">
-                      {/* Day headers */}
-                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
-                        <div key={index} className="text-center text-xs font-bold text-gray-400 py-2">
-                          {day}
-                        </div>
-                      ))}
+                <div className="text-center flex-1">
+                  <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase">
+                    {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </h3>
+                  {currentMonth.toDateString() !== new Date().toDateString() && (
+                    <button
+                      onClick={goToToday}
+                      className="text-xs text-orange-500 hover:text-orange-600 font-medium mt-1"
+                    >
+                      Today
+                    </button>
+                  )}
+                </div>
 
-                      {/* Calendar days */}
-                      {Array.from({ length: 42 }, (_, index) => {
-                        const firstDay = new Date(monthData.year, monthData.month, 1);
-                        const startCalendar = new Date(firstDay);
-                        startCalendar.setDate(startCalendar.getDate() - firstDay.getDay());
+                <button
+                  onClick={goToNextMonth}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+                  aria-label="Next month"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
 
-                        const currentDate = new Date(startCalendar);
-                        currentDate.setDate(currentDate.getDate() + index);
-
-                        const isCurrentMonthDay = currentDate.getMonth() === monthData.month;
-                        const isToday = currentDate.toDateString() === new Date().toDateString();
-                        const isCompleted = completedDates.includes(currentDate.toDateString());
-
-                        return (
-                          <motion.button
-                            key={`${monthIndex}-${index}`}
-                            whileHover={{ scale: isCurrentMonthDay ? 1.05 : 1 }}
-                            whileTap={{ scale: isCurrentMonthDay ? 0.95 : 1 }}
-                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                            className={`
-                              aspect-square flex items-center justify-center text-sm font-semibold rounded-full relative
-                              transition-all duration-200 cursor-pointer
-                              ${!isCurrentMonthDay
-                                ? 'text-gray-300 cursor-default'
-                                : isCompleted
-                                  ? 'bg-orange-500 text-white shadow-md shadow-orange-200'
-                                  : isToday
-                                  ? 'border-2 border-orange-500 text-gray-900 font-bold'
-                                  : 'text-gray-400 hover:text-gray-600'
-                              }
-                            `}
-                          >
-                            {currentDate.getDate()}
-
-                            {/* Completion animation */}
-                            {isCompleted && isCurrentMonthDay && (
-                              <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                className="absolute inset-0 bg-orange-500 rounded-full"
-                                style={{ zIndex: -1 }}
-                              />
-                            )}
-                          </motion.button>
-                        );
-                      })}
-                    </div>
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-2 mb-6">
+                {/* Day headers */}
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+                  <div key={index} className="text-center text-xs font-bold text-gray-400 py-2">
+                    {day}
                   </div>
-                );
-              })}
+                ))}
 
-              {/* Calendar Legend - Sticky at bottom of scroll */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm sticky bottom-0">
-                <div className="flex items-center justify-center gap-8 text-xs text-gray-500">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full" />
-                    <span>Completed</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 ring-2 ring-orange-500 rounded-full" />
-                    <span>Today</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-gray-300 rounded-full" />
-                    <span>Missed</span>
-                  </div>
+                {/* Calendar days */}
+                {Array.from({ length: 42 }, (_, index) => {
+                  const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+                  const startCalendar = new Date(firstDay);
+                  startCalendar.setDate(startCalendar.getDate() - firstDay.getDay());
+
+                  const day = new Date(startCalendar);
+                  day.setDate(day.getDate() + index);
+
+                  const isCurrentMonth = day.getMonth() === currentMonth.getMonth();
+                  const isToday = day.toDateString() === new Date().toDateString();
+                  const isCompleted = completedDates.includes(day.toDateString());
+
+                  return (
+                    <motion.button
+                      key={index}
+                      whileHover={{ scale: isCurrentMonth ? 1.05 : 1 }}
+                      whileTap={{ scale: isCurrentMonth ? 0.95 : 1 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                      className={`
+                        aspect-square flex items-center justify-center text-sm font-semibold rounded-full relative
+                        transition-all duration-200 cursor-pointer
+                        ${!isCurrentMonth
+                          ? 'text-gray-300 cursor-default'
+                          : isCompleted
+                            ? 'bg-orange-500 text-white shadow-md shadow-orange-200'
+                            : isToday
+                            ? 'border-2 border-orange-500 text-gray-900 font-bold'
+                            : 'text-gray-400 hover:text-gray-600'
+                        }
+                      `}
+                    >
+                      {day.getDate()}
+
+                      {/* Completion animation */}
+                      {isCompleted && isCurrentMonth && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                          className="absolute inset-0 bg-orange-500 rounded-full"
+                          style={{ zIndex: -1 }}
+                        />
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center justify-center gap-8 text-xs text-gray-500 border-t border-gray-100 pt-5">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-500 rounded-full" />
+                  <span>Completed</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 ring-2 ring-orange-500 rounded-full" />
+                  <span>Today</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gray-300 rounded-full" />
+                  <span>Missed</span>
                 </div>
               </div>
             </div>
@@ -1914,6 +1966,38 @@ function DashboardPageClient() {
                 <p className="text-xs text-gray-500 mt-2 font-medium">Total completed</p>
               </motion.div>
             </div>
+
+            {/* DEV ONLY: Mock Start Date Controller */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mt-6 p-3 bg-purple-50 border-2 border-purple-200 rounded-xl">
+                <p className="text-[10px] font-bold text-purple-800 mb-3">
+                  🧪 DEV: Mock Start Date (temp - will be removed)
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      resetMockUserStartDate();
+                      window.location.reload();
+                    }}
+                    className="flex-1 py-2 bg-purple-200 hover:bg-purple-300 text-purple-900 text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    Reset to 3mo ago
+                  </button>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('mockUserStartDate');
+                      window.location.reload();
+                    }}
+                    className="flex-1 py-2 bg-red-200 hover:bg-red-300 text-red-900 text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    Clear mock
+                  </button>
+                </div>
+                <p className="text-[9px] text-purple-700 mt-2">
+                  Current: {new Date(localStorage.getItem('mockUserStartDate') || '').toLocaleDateString()}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

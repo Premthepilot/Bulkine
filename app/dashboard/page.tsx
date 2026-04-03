@@ -107,6 +107,22 @@ function DashboardPageClient() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // Floating menu state
+  const [showFloatingMenu, setShowFloatingMenu] = useState(false);
+
+  // Handle scroll lock when menu is open
+  useEffect(() => {
+    if (showFloatingMenu) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [showFloatingMenu]);
+
   // Mascot motivational messages rotation
   const motivationalMessages = [
     "Your capy buddy is ready for a big meal. Let's fuel up together!",
@@ -308,10 +324,13 @@ function DashboardPageClient() {
     }
   }, [searchQuery]);
 
-  // Auto-focus name input when inline entry opens
+  // Delay focus until after modal animation completes (allows smooth animation on mobile)
   useEffect(() => {
     if (showManualEntry && nameInputRef.current) {
-      nameInputRef.current.focus();
+      const timer = setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 350);
+      return () => clearTimeout(timer);
     }
   }, [showManualEntry]);
 
@@ -968,7 +987,7 @@ function DashboardPageClient() {
         </div>
 
         {/* Mascot Section with Gamification */}
-        <div className="px-6 pb-2 flex flex-col items-center">
+        <div className="px-6 pb-2 pt-2 flex flex-col items-center">
           {/* Mascot with dynamic state */}
           <div className="relative">
             {/* Background glow effect */}
@@ -1052,8 +1071,8 @@ function DashboardPageClient() {
           </div>
         </div>
 
-        {/* Motivation Text */}
-        <div className="px-6 pb-3 text-center min-h-12 flex items-center justify-center">
+        {/* Motivational Quote Text */}
+        <div className="px-6 mt-2 text-center h-[52px] flex items-center justify-center">
           <AnimatePresence mode="wait">
             <motion.p
               key={motivation.main}
@@ -1061,7 +1080,7 @@ function DashboardPageClient() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
               transition={{ duration: 0.3 }}
-              className="text-lg font-bold text-gray-900 leading-tight"
+              className="text-lg font-bold text-gray-900 leading-tight line-clamp-2"
             >
               {motivation.main}{' '}
               {motivation.highlight && (
@@ -1069,93 +1088,51 @@ function DashboardPageClient() {
               )}
             </motion.p>
           </AnimatePresence>
-          {viewMode === 'overall' && (
-            <motion.div
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.1 }}
-              className="mt-4"
-            >
-              {/* Weight Progress Bar */}
-              <div className="relative mt-2">
-                <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${displayProgress}%` }}
-                    transition={{ duration: 0.8, ease: 'easeOut' }}
-                    className={`h-full bg-gradient-to-r from-orange-400 to-orange-500 ${
-                      displayProgress === 100 ? 'rounded-full' : 'rounded-l-full'
-                    }`}
-                  />
-                </div>
-                {/* Milestone markers */}
-                <div className="absolute top-0 left-0 right-0 h-3 flex items-center">
-                  <div className="absolute left-1/4 w-0.5 h-3 bg-gray-300" />
-                  <div className="absolute left-1/2 w-0.5 h-3 bg-gray-300" />
-                  <div className="absolute left-3/4 w-0.5 h-3 bg-gray-300" />
-                </div>
-              </div>
-              {/* Progress info */}
-              <div className="flex justify-between items-center mt-3 text-sm">
-                <span className="text-gray-500">{startingWeight} kg</span>
-                <span className="font-bold text-orange-600">{Math.round(weightProgress)}%</span>
-                <span className="text-gray-500">{goalWeight} kg</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">
-                Current: {currentWeight} kg
-              </p>
-
-              {/* DEV ONLY: Test milestone triggers */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="mt-4 p-3 bg-yellow-50 border-2 border-yellow-300 rounded-xl">
-                  <p className="text-[10px] font-bold text-yellow-800 mb-2">⚠️ DEV: Test Milestones</p>
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      onClick={() => {
-                        prevWeightProgressRef.current = 0;
-                        setTestWeightProgress(26);
-                      }}
-                      className="flex-1 py-1.5 bg-yellow-200 hover:bg-yellow-300 text-yellow-900 text-xs font-semibold rounded-lg"
-                    >
-                      Test 25%
-                    </button>
-                    <button
-                      onClick={() => {
-                        prevWeightProgressRef.current = 0;
-                        setTestWeightProgress(51);
-                      }}
-                      className="flex-1 py-1.5 bg-yellow-200 hover:bg-yellow-300 text-yellow-900 text-xs font-semibold rounded-lg"
-                    >
-                      Test 50%
-                    </button>
-                    <button
-                      onClick={() => {
-                        prevWeightProgressRef.current = 0;
-                        setTestWeightProgress(76);
-                      }}
-                      className="flex-1 py-1.5 bg-yellow-200 hover:bg-yellow-300 text-yellow-900 text-xs font-semibold rounded-lg"
-                    >
-                      Test 75%
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setTestWeightProgress(null);
-                      prevWeightProgressRef.current = calculatedWeightProgress;
-                    }}
-                    className="w-full py-1.5 bg-red-200 hover:bg-red-300 text-red-900 text-xs font-semibold rounded-lg"
-                  >
-                    Reset to Real Progress
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          )}
         </div>
+
+        {/* Progress Section - Overall Mode Only */}
+        {viewMode === 'overall' && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="px-6 mt-2 mb-6"
+          >
+            {/* Weight Progress Bar */}
+            <div className="relative">
+              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${displayProgress}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                  className={`h-full bg-gradient-to-r from-orange-400 to-orange-500 ${
+                    displayProgress === 100 ? 'rounded-full' : 'rounded-l-full'
+                  }`}
+                />
+              </div>
+              {/* Milestone markers */}
+              <div className="absolute top-0 left-0 right-0 h-3 flex items-center">
+                <div className="absolute left-1/4 w-0.5 h-3 bg-gray-300" />
+                <div className="absolute left-1/2 w-0.5 h-3 bg-gray-300" />
+                <div className="absolute left-3/4 w-0.5 h-3 bg-gray-300" />
+              </div>
+            </div>
+
+            {/* Progress Stats */}
+            <div className="flex justify-between items-center mt-2 text-sm">
+              <span className="text-gray-500">{startingWeight} kg</span>
+              <span className="font-bold text-orange-600">{Math.round(weightProgress)}%</span>
+              <span className="text-gray-500">{goalWeight} kg</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              Current: {currentWeight} kg
+            </p>
+          </motion.div>
+        )}
 
         {/* Calorie Remaining - Only show in daily mode */}
         {viewMode === 'daily' && (
-          <div className="px-6 pb-6 text-center">
+          <div className="px-6 pb-6 mb-6 text-center">
             <p className="text-base text-gray-600">
               You need{' '}
               <motion.span
@@ -1477,7 +1454,7 @@ function DashboardPageClient() {
 
         {/* Profile Tab Content */}
         {activeTab === 'profile' && (
-          <div className="px-6 pt-4 pb-6 flex-1">
+          <div className="px-6 pt-4 pb-20 flex-1">
             {/* Profile Header */}
             <div className="text-center mb-8">
               <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center mb-3">
@@ -1496,111 +1473,155 @@ function DashboardPageClient() {
                 </svg>
               </div>
               <h2 className="text-xl font-bold text-gray-900">Your Profile</h2>
+              <p className="text-sm text-gray-500 mt-1">Manage your plan</p>
             </div>
 
-            {/* Progress Section */}
-            <div className="bg-white rounded-2xl p-5 mb-4">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-4">
-                YOUR PROGRESS
-              </h3>
+            {/* Body & Goals Section */}
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
+                  Body & Goals
+                </h3>
+                <div className="bg-gray-50 rounded-xl overflow-hidden">
+                  {/* Current Weight - Clickable */}
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between hover:bg-gray-100 transition-colors cursor-pointer">
+                    <span className="text-sm text-gray-600">Current weight</span>
+                    <span className="font-medium text-gray-900">{currentWeight} kg</span>
+                  </div>
 
-              <div className="space-y-4">
-                {/* Starting Weight */}
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Starting weight</span>
-                  <span className="font-bold text-gray-900">{startingWeight} kg</span>
-                </div>
+                  {/* Goal Weight */}
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Goal weight</span>
+                    <span className="font-medium text-gray-900">{goalWeight} kg</span>
+                  </div>
 
-                {/* Current Weight */}
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Current weight</span>
-                  <span className="font-bold text-gray-900">{currentWeight} kg</span>
-                </div>
-
-                {/* Divider */}
-                <div className="border-t border-gray-100" />
-
-                {/* Total Gain */}
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Total change</span>
-                  <span className={`font-bold ${weightGained >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                    {weightGained >= 0 ? '+' : ''}{weightGained.toFixed(1)} kg
-                  </span>
-                </div>
-
-                {/* Last Updated */}
-                {lastWeightUpdate && (
-                  <p className="text-xs text-gray-400 text-center pt-2">
-                    Last updated: {lastWeightUpdate.toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Update Weight Button */}
-            <button
-              onClick={() => setShowWeightModal(true)}
-              className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              Update weight
-            </button>
-
-            {/* Stats Section */}
-            <div className="mt-6 bg-white rounded-2xl p-5">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-4">
-                STATS
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                  <p className="text-2xl font-bold text-orange-500">🔥 {streak}</p>
-                  <p className="text-xs text-gray-500 mt-1">Day streak</p>
-                </div>
-                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                  <p className="text-2xl font-bold text-gray-900">{weightHistory.length}</p>
-                  <p className="text-xs text-gray-500 mt-1">Weigh-ins</p>
+                  {/* Starting Weight */}
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Starting weight</span>
+                    <span className="font-medium text-gray-900">{startingWeight} kg</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Logout Button */}
-            <div className="mt-6">
-              <button
-                onClick={() => setShowLogoutConfirm(true)}
-                className="w-full py-3.5 bg-white hover:bg-red-50 text-red-600 font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 border-2 border-red-200"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
+              {/* Nutrition Plan Section */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
+                  Nutrition Plan
+                </h3>
+                <div className="bg-gray-50 rounded-xl overflow-hidden">
+                  {/* Daily Calories */}
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Daily target</span>
+                    <span className="font-medium text-gray-900">{totalTarget + surplus} kcal</span>
+                  </div>
+
+                  {/* Surplus */}
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Surplus</span>
+                    <span className="font-medium text-gray-900">+{surplus} kcal</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Section */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
+                  Progress Snapshot
+                </h3>
+                <div className="bg-gray-50 rounded-xl overflow-hidden">
+                  {/* Total Change */}
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Total change</span>
+                    <span className={`font-medium ${weightGained >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {weightGained >= 0 ? '+' : ''}{weightGained.toFixed(1)} kg
+                    </span>
+                  </div>
+
+                  {/* Progress Percentage */}
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Goal progress</span>
+                    <span className="font-medium text-gray-900">{Math.round(calculatedWeightProgress)}%</span>
+                  </div>
+
+                  {/* Last Updated */}
+                  {lastWeightUpdate && (
+                    <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Last updated</span>
+                      <span className="text-xs text-gray-600">
+                        {lastWeightUpdate.toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Stats Section */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
+                  Stats
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-orange-500">🔥</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">{streak}</p>
+                    <p className="text-xs text-gray-500 mt-1">Day streak</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-gray-400">📊</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">{weightHistory.length}</p>
+                    <p className="text-xs text-gray-500 mt-1">Weigh-ins</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3 pt-2">
+                {/* Update Weight Button */}
+                <button
+                  onClick={() => setShowWeightModal(true)}
+                  className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                  />
-                </svg>
-                Logout
-              </button>
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  Update weight
+                </button>
+
+                {/* Logout Button */}
+                <button
+                  onClick={() => setShowLogoutConfirm(true)}
+                  className="w-full py-3 bg-gray-50 hover:bg-red-50 text-red-600 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 border border-gray-200"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                  Logout
+                </button>
+              </div>
             </div>
 
             {/* Logout Confirmation Modal */}
@@ -2001,48 +2022,91 @@ function DashboardPageClient() {
           </div>
         )}
 
-        {/* Bottom padding for fixed nav */}
-        <div className="h-24" />
+        {/* Bottom padding for floating menu */}
+        <div className="h-8" />
 
-        {/* Fixed Bottom Navigation - Floating Pill Style */}
-        <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-6 bg-white/95 backdrop-blur-sm rounded-full px-6 py-3 shadow-lg shadow-gray-900/10">
-            {[
-              { id: 'dashboard', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-              { id: 'streaks', label: 'Streaks', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-              { id: 'nutrition', label: 'Food', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
-              { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`
-                  flex flex-col items-center gap-0.5 transition-all duration-200
-                  ${activeTab === tab.id
-                    ? 'text-orange-500 scale-105'
-                    : 'text-gray-400 hover:text-gray-600'}
-                `}
+        {/* Background Overlay (rendered FIRST, stays behind everything) */}
+        <AnimatePresence>
+          {showFloatingMenu && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-40 bg-black/10 backdrop-blur-sm"
+              onClick={() => setShowFloatingMenu(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Floating Expandable Menu (FAB Style) - Rendered AFTER overlay, stays above */}
+        <div className="fixed bottom-4 right-4 z-50">
+
+          {/* Menu Items Container */}
+          <AnimatePresence>
+            {showFloatingMenu && (
+              <motion.div
+                initial={{ opacity: 0, x: 40, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 40, scale: 0.95 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="absolute bottom-16 right-0 flex flex-col gap-2 items-end"
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={activeTab === tab.id ? 2.5 : 2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d={tab.icon}
-                  />
-                </svg>
-                <span className={`text-[10px] font-semibold ${activeTab === tab.id ? 'text-orange-500' : ''}`}>
-                  {tab.label}
-                </span>
-              </button>
-            ))}
-          </div>
-        </nav>
+                {[
+                  { id: 'dashboard', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+                  { id: 'streaks', label: 'Streaks', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+                  { id: 'nutrition', label: 'Food', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+                  { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+                ].map((tab, index) => (
+                  <motion.button
+                    key={tab.id}
+                    initial={{ opacity: 0, x: 40 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setShowFloatingMenu(false);
+                    }}
+                    className="flex items-center gap-2 bg-white rounded-full px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow whitespace-nowrap"
+                  >
+                    <svg
+                      className={`w-5 h-5 ${activeTab === tab.id ? 'text-orange-500' : 'text-gray-600'}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d={tab.icon}
+                      />
+                    </svg>
+                    <span className={`text-sm font-semibold ${activeTab === tab.id ? 'text-orange-500' : 'text-gray-700'}`}>
+                      {tab.label}
+                    </span>
+                  </motion.button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* FAB Button */}
+          <motion.button
+            onClick={() => setShowFloatingMenu(!showFloatingMenu)}
+            className="w-12 h-12 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg hover:shadow-xl transition-shadow"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <motion.span
+              animate={{ rotate: showFloatingMenu ? 90 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="text-xl font-bold"
+            >
+              ⋯
+            </motion.span>
+          </motion.button>
+        </div>
 
         {/* Level Up Celebration Overlay */}
         <AnimatePresence>

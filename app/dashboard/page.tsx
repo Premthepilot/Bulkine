@@ -61,25 +61,39 @@ function resetMockUserStartDate(): void {
 }
 
 // Custom hook for tracking scroll direction and hiding header
-// Custom hook for showing header only when at absolute top
-function useScrollHide() {
-  const [isVisible, setIsVisible] = useState(true);
+// Custom hook for scroll-linked header animation
+// Header smoothly slides away as user scrolls, reappears on scroll up
+function useScrollLinkedHeader() {
+  const [headerStyle, setHeaderStyle] = useState<{ transform: string; opacity: number }>({
+    transform: 'translateY(0)',
+    opacity: 1,
+  });
 
   useEffect(() => {
     const handleScroll = () => {
       // Clamp scroll value to prevent negative values from scroll bounce
       const scrollY = Math.max(window.scrollY, 0);
 
-      // Show header ONLY if at absolute top (scrollY <= 2)
-      // Hide for any scroll position above this threshold
-      setIsVisible(scrollY <= 2);
+      // Calculate progress (0 to 1) over 100px scroll distance
+      // At scrollY=0: progress=0 (header fully visible)
+      // At scrollY=100: progress=1 (header fully hidden)
+      const progress = Math.min(scrollY / 100, 1);
+
+      // Apply continuous transform and opacity based on scroll
+      const translateY = -progress * 100;
+      const opacity = 1 - progress;
+
+      setHeaderStyle({
+        transform: `translateY(${translateY}%)`,
+        opacity: Math.max(opacity, 0),
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  return isVisible;
+  return headerStyle;
 }
 
 function DashboardPageClient() {
@@ -87,8 +101,8 @@ function DashboardPageClient() {
   const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  // Scroll hide header state
-  const headerVisible = useScrollHide();
+  // Scroll-linked header animation
+  const headerStyle = useScrollLinkedHeader();
 
   // Food logging state
   const [foodLog, setFoodLog] = useState<FoodLogEntry[]>([]);
@@ -901,12 +915,14 @@ function DashboardPageClient() {
         {/* Main Content */}
         {!loading && !error && (
         <>
-        {/* Fixed Floating Transparent Header - Appears Only at Top */}
+        {/* Fixed Floating Transparent Header - Scroll-Linked Animation */}
         <header
-          className="fixed top-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-between transition-transform duration-500 ease-in-out"
+          className="fixed top-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-between will-change-transform"
           style={{
-            transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
+            transform: headerStyle.transform,
+            opacity: headerStyle.opacity,
             textShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            transition: 'none', // No transition - animation is tied to scroll
           }}
         >
           {activeTab === 'streaks' ? (

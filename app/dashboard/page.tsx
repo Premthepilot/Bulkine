@@ -216,19 +216,6 @@ function DashboardPageClient() {
     };
   }, [showFloatingMenu]);
 
-  // Mascot motivational messages rotation
-  const motivationalMessages = [
-    "Your capy buddy is ready for a big meal. Let's fuel up together!",
-    "Time to hit your calories — your buddy is waiting!",
-    "Big gains start with big meals. Let's go!",
-    "Fuel your body, build your strength.",
-    "Consistency today = results tomorrow.",
-    "Let's make today count — one meal at a time.",
-    "You've got this, one calorie at a time!",
-    "Hunger is the best sauce — let's feast!"
-  ];
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-
   const searchInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const mascotControls = useAnimation();
@@ -251,20 +238,6 @@ function DashboardPageClient() {
       }
     });
   }, []);
-
-  // Rotate motivational messages
-  useEffect(() => {
-    // Pick a random message on mount
-    setCurrentMessageIndex(Math.floor(Math.random() * motivationalMessages.length));
-
-    // Set up rotation interval (rotate every 6 seconds)
-    const interval = setInterval(() => {
-      setCurrentMessageIndex((prev) => (prev + 1) % motivationalMessages.length);
-    }, 6000);
-
-    // Cleanup
-    return () => clearInterval(interval);
-  }, [motivationalMessages.length]);
 
   // Mascot tap handler - show contextual message
   const handleMascotTap = () => {
@@ -957,26 +930,6 @@ function DashboardPageClient() {
     ? new Date(weightHistory[weightHistory.length - 1].date)
     : null;
 
-  const getMotivationText = () => {
-    // Overall mode: milestone-based motivation
-    if (viewMode === 'overall') {
-      if (weightProgress >= 75) return { main: "You're almost there", highlight: '' };
-      if (weightProgress >= 50) return { main: "Looking stronger", highlight: '' };
-      if (weightProgress >= 25) return { main: "Building momentum", highlight: '' };
-      return { main: "Just getting started", highlight: '' };
-    }
-
-    // Daily mode: Use rotating messages at lower progress, context-based at higher
-    const percentage = (caloriesConsumed / totalTarget) * 100;
-    if (percentage >= 100) return { main: 'Amazing work today!', highlight: "You've crushed your goal!" };
-    if (percentage >= 75) return { main: 'Almost there!', highlight: 'Keep pushing!' };
-    if (percentage >= 50) return { main: 'Halfway there!', highlight: "You're doing great!" };
-
-    // Show rotating messages for early progress
-    return { main: motivationalMessages[currentMessageIndex], highlight: '' };
-  };
-
-  const motivation = getMotivationText();
   const mascotState = getMascotState();
 
   return (
@@ -1145,7 +1098,7 @@ function DashboardPageClient() {
         </div>
 
         {/* Mascot Section with Gamification */}
-        <div className="px-6 pt-6 pb-2 flex flex-col items-center">
+        <div className="px-6 pt-6 pb-6 flex flex-col items-center">
           {/* Mascot with dynamic state */}
           <div className="relative">
             {/* Background glow effect */}
@@ -1267,25 +1220,6 @@ function DashboardPageClient() {
               </AnimatePresence>
             </div>
           </div>
-        </div>
-
-        {/* Motivational Quote Text */}
-        <div className="px-6 mt-2 text-center h-[52px] flex items-center justify-center">
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={motivation.main}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.3 }}
-              className="text-lg font-bold text-gray-900 leading-tight line-clamp-2"
-            >
-              {motivation.main}{' '}
-              {motivation.highlight && (
-                <span className="text-orange-600">{motivation.highlight}</span>
-              )}
-            </motion.p>
-          </AnimatePresence>
         </div>
 
         {/* Progress Section - Overall Mode Only */}

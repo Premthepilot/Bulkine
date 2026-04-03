@@ -1098,7 +1098,7 @@ function DashboardPageClient() {
         </div>
 
         {/* Mascot Section with Gamification */}
-        <div className="px-6 pt-6 pb-6 flex flex-col items-center">
+        <div className="px-6 pt-6 pb-6 mt-8 flex flex-col items-center">
           {/* Mascot with dynamic state */}
           <div className="relative">
             {/* Background glow effect */}

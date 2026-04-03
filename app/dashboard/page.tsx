@@ -1174,21 +1174,34 @@ function DashboardPageClient() {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Mascot thought bubble message - cloud popping out effect */}
+              {/* Mascot thought bubble message - smooth cloud-like animation */}
               <AnimatePresence>
                 {mascotMessage && (
                   <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: -40, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ duration: 0.25, ease: 'easeOut' }}
-                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30 bg-white rounded-2xl px-4 py-2.5 shadow-md border border-gray-100 max-w-[220px]"
+                    initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                    animate={{
+                      opacity: 1,
+                      scale: [1.05, 1],
+                      y: -45,
+                    }}
+                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                    transition={{
+                      duration: 0.3,
+                      ease: 'easeOut',
+                      scale: {
+                        type: 'spring',
+                        stiffness: 200,
+                        damping: 20,
+                        mass: 1,
+                      }
+                    }}
+                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30 bg-white rounded-3xl px-5 py-3 shadow-lg border border-gray-50 max-w-[240px]"
                   >
-                    <p className="text-sm font-medium text-gray-800 text-center leading-snug">
+                    <p className="text-sm font-semibold text-gray-800 text-center leading-snug">
                       {mascotMessage.text}
                     </p>
-                    {/* Cloud tail - small triangle pointing down */}
-                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-gray-100 transform rotate-45" />
+                    {/* Cloud tail - elegant pointer below bubble */}
+                    <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border-r border-b border-gray-50 transform rotate-45 shadow-sm" />
                   </motion.div>
                 )}
               </AnimatePresence>

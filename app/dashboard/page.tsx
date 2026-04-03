@@ -200,6 +200,11 @@ function DashboardPageClient() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // Profile state
+  const [username, setUsername] = useState('User');
+  const [email, setEmail] = useState('user@example.com');
+  const [showRedesignConfirm, setShowRedesignConfirm] = useState(false);
+
   // Floating menu state
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
 
@@ -902,6 +907,21 @@ function DashboardPageClient() {
     }
   };
 
+  // Redesign plan handler
+  const handleRedesignPlan = async () => {
+    try {
+      // Clear plan and onboarding data
+      localStorage.removeItem('userPlan');
+      localStorage.removeItem('onboardingData');
+
+      // Redirect to onboarding
+      router.push('/onboarding');
+    } catch (error) {
+      console.error('Error redesigning plan:', error);
+      setShowRedesignConfirm(false);
+    }
+  };
+
   // Logout handler
   const handleLogout = async () => {
     try {
@@ -1600,25 +1620,40 @@ function DashboardPageClient() {
         {/* Profile Tab Content */}
         {activeTab === 'profile' && (
           <div className="px-6 pt-4 pb-20 flex-1">
-            {/* Profile Header */}
-            <div className="text-center mb-8">
-              <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center mb-3">
-                <svg
-                  className="w-10 h-10 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+            {/* Personal Info Section */}
+            <div className="mb-6">
+              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
+                Personal Info
+              </h3>
+              <div className="space-y-3">
+                {/* Username Field */}
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 rounded-lg border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-transparent transition-all"
+                    placeholder="Enter your name"
                   />
-                </svg>
+                </div>
+
+                {/* Email Field */}
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 rounded-lg border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-transparent transition-all"
+                    placeholder="your@email.com"
+                  />
+                </div>
               </div>
-              <h2 className="text-xl font-bold text-gray-900">Your Profile</h2>
-              <p className="text-sm text-gray-500 mt-1">Manage your plan</p>
             </div>
 
             {/* Body & Goals Section */}
@@ -1746,6 +1781,27 @@ function DashboardPageClient() {
                   Update weight
                 </button>
 
+                {/* Redesign Plan Button */}
+                <button
+                  onClick={() => setShowRedesignConfirm(true)}
+                  className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 border border-gray-200"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Redesign plan
+                </button>
+
                 {/* Logout Button */}
                 <button
                   onClick={() => setShowLogoutConfirm(true)}
@@ -1814,6 +1870,49 @@ function DashboardPageClient() {
                         ) : (
                           'Logout'
                         )}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Redesign Plan Confirmation Modal */}
+            <AnimatePresence>
+              {showRedesignConfirm && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
+                  onClick={() => setShowRedesignConfirm(false)}
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="bg-white rounded-3xl p-6 w-full max-w-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">
+                      Redesign your plan?
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                      This will reset your current plan and onboarding progress. You can set up a new plan from scratch.
+                    </p>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowRedesignConfirm(false)}
+                        className="flex-1 py-3 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleRedesignPlan}
+                        className="flex-1 py-3 rounded-xl font-semibold text-white bg-orange-500 hover:bg-orange-600 transition-colors"
+                      >
+                        Continue
                       </button>
                     </div>
                   </motion.div>

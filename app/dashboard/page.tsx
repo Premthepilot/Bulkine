@@ -31,85 +31,54 @@ interface FoodLogEntry {
 
 // ========== MASCOT BEHAVIOR SYSTEM ==========
 type MascotMood = 'tired' | 'waking' | 'eating' | 'focused' | 'excited' | 'flexing';
-type MessageContext = 'progress' | 'food' | 'streak' | 'idle' | 'greeting' | 'tap';
 
 interface MascotMessage {
   text: string;
-  emoji: string;
 }
 
-// Dynamic message bank - messages feel conversational and contextual
-const mascotMessageBank: Record<MascotMood, Record<MessageContext, string[]>> = {
-  tired: {
-    progress: ["You've got this! 💪", "Let's start strong!", "First step counts!"],
-    food: ["Every bite helps! 🍔", "Fueling up now! ⚡", "Building foundation!"],
-    streak: ["Day 1 starts now! 🔥", "Beginning of greatness!", "Let's go!"],
-    idle: ["Ready when you are...", "I believe in you!", "Come on, let's move!"],
-    greeting: ["Hi buddy! Ready to grow?", "Let's make today count!", "Time to fuel up! 🍽️"],
-    tap: ["I'm ready! 💪", "Let's do this!", "You got me hyped!"],
-  },
-  waking: {
-    progress: ["Warming up! 💪", "Getting into rhythm!", "Nice pace!"],
-    food: ["That's the way! 🔥", "More fuel = more gains!", "Smart choice! ✨"],
-    streak: ["Growing stronger! 🔥", "Keep this momentum!", "You're on fire!"],
-    idle: ["One more meal incoming?", "You're building something!", "This is solid work!"],
-    greeting: ["Let's keep this going!", "You're waking up! 💪", "I can feel the energy!"],
-    tap: ["We're cooking! 🔥", "This is the way!", "Let's gooo!"],
-  },
-  eating: {
-    progress: ["Steady work! 🎯", "You're in the zone!", "This is the way!"],
-    food: ["Consistency is key! 🏆", "Perfect! Keep it up!", "That's elite eating! 🔥"],
-    streak: ["Days stacking up! 🔥", "The grind pays off!", "Unstoppable!"],
-    idle: ["More growth incoming?", "You're doing amazing!", "Let's fuel some more!"],
-    greeting: ["You know what's up!", "Steady wins the race! 🏆", "Keep crushing it!"],
-    tap: ["That's the energy! ⚡", "Let's go, legend!", "I feel it! 💪"],
-  },
-  focused: {
-    progress: ["This is incredible! 💪", "You're crushing it!", "Peak performance! 🎯"],
-    food: ["THAT'S the strategy! 🔥", "Nutrition like a pro!", "You know your stuff! 🏆"],
-    streak: ["LEGENDARY consistency! 🔥", "You're untouchable!", "An absolute machine!"],
-    idle: ["This pace is elite! 💪", "You're unstoppable!", "Can't stop won't stop!"],
-    greeting: ["Look at you go! 🔥", "You're in the zone!", "This is peak capy energy!"],
-    tap: ["YES! Let's GOOOO! 🚀", "Feeling invincible! 💪", "Peak performance! 🏆"],
-  },
-  excited: {
-    progress: ["SO CLOSE! 🏆", "ALMOST THERE! YOU'VE GOT THIS! 💪", "Final stretch! 🔥"],
-    food: ["YES! FINISH STRONG! 🔥", "That's the final push!", "UNSTOPPABLE NOW! 💪"],
-    streak: ["LEGENDARY STREAK! 🔥🔥", "ABSOLUTELY UNREAL! 🏆", "YOU'RE A BEAST! 💪"],
-    idle: ["One more step! 💪", "I can feel it! 🏆", "We're almost home!"],
-    greeting: ["WE'RE SO CLOSE! 🔥", "Can you feel it? 💪", "This is it! 🏆"],
-    tap: ["LET'S FINISH THIS! 🚀", "FINAL PUSH TIME! 💪", "WE GOT THIS! 🔥"],
-  },
-  flexing: {
-    progress: ["🏆 YOU MADE IT! 🏆", "ABSOLUTE LEGEND! 💪", "PEAK PERFORMANCE! 🔥"],
-    food: ["Maintaining excellence! 🏆", "Champions eat smart! 💪", "The power of consistency! 🔥"],
-    streak: ["UNSTOPPABLE FORCE! 🔥🔥", "LEGENDARY GRIND! 🏆", "YOU'RE ELITE! 💪"],
-    idle: ["You're a champion! 🏆", "Bask in the glory! 💪", "Peak capybara energy! 🔥"],
-    greeting: ["Look at the legend! 🏆", "You're living proof! 💪", "PEAK PERFORMANCE! 🔥"],
-    tap: ["CHAMPION ENERGY! 🏆", "UNSTOPPABLE! 💪", "PEAK FLEX MODE! 🔥"],
-  },
+// Progress-based message system - contextual instead of random
+const getProgressMessage = (progress: number): string => {
+  if (progress >= 100) {
+    // Goal achieved messages
+    return progress === 100 ? "That's what I'm talking about!" : "Goal smashed 💪";
+  }
+  if (progress >= 90) {
+    // Final stretch - alternating messages
+    return progress === 90 ? "So close. Finish strong." : "One more push.";
+  }
+  if (progress >= 50) {
+    // Halfway+ messages
+    return progress >= 70 ? "Almost there — stay consistent." : "Nice progress… don't slow down now.";
+  }
+  if (progress >= 1) {
+    // Early progress messages
+    return progress >= 25 ? "We're building momentum." : "Good start — keep it going.";
+  }
+  // No progress yet
+  return "Fuel up, we've got work to do.";
 };
 
-// Get mascot mood based on progress
-const getMascotMood = (progress: number): MascotMood => {
-  if (progress < 1) return 'tired';
-  if (progress < 25) return 'waking';
-  if (progress < 60) return 'eating';
-  if (progress < 90) return 'focused';
-  if (progress < 100) return 'excited';
-  return 'flexing';
+// Context-specific messages for food/streak/tap
+const getTapMessage = (progress: number): string => {
+  if (progress >= 100) return "Let's keep crushing it! 💪";
+  if (progress >= 90) return "Push for the finish line! 🏆";
+  if (progress >= 50) return "You're in it now! 💪";
+  if (progress >= 1) return "Let's fuel up! 🔥";
+  return "Let's get started!";
 };
 
-// Get contextual message for mascot
-const getMascotMessage = (progress: number, context: MessageContext): MascotMessage => {
-  const mood = getMascotMood(progress);
-  const messages = mascotMessageBank[mood][context];
-  const selectedText = messages[Math.floor(Math.random() * messages.length)];
+const getFoodMessage = (progress: number): string => {
+  if (progress >= 90) return "YES! FINISH STRONG! 🔥";
+  if (progress >= 50) return "That's the way! Keep it up! ✨";
+  if (progress >= 1) return "Every bite counts! 🚀";
+  return "First meal matters! Let's go! 🚀";
+};
 
-  return {
-    text: selectedText,
-    emoji: '💭',
-  };
+const getStreakMessage = (progress: number): string => {
+  if (progress >= 90) return "LEGENDARY consistency! 🔥";
+  if (progress >= 50) return "Days stacking up! Stay strong! 🏆";
+  if (progress >= 1) return "Building the habit! 💪";
+  return "Starting the grind! 🔥";
 };
 // ========== END MASCOT BEHAVIOR SYSTEM ==========
 
@@ -203,7 +172,6 @@ function DashboardPageClient() {
   const [tempMessage, setTempMessage] = useState<{ text: string; emoji: string } | null>(null);
   const [showCelebration, setShowCelebration] = useState<{ level: number; message: string } | null>(null);
   const [mascotMessage, setMascotMessage] = useState<MascotMessage | null>(null);
-  const [lastMascotMessageContext, setLastMascotMessageContext] = useState<MessageContext | null>(null);
 
   // DEV ONLY: Test override for weight progress
   const [testWeightProgress, setTestWeightProgress] = useState<number | null>(null);
@@ -301,9 +269,14 @@ function DashboardPageClient() {
   // Mascot tap handler - show contextual message
   const handleMascotTap = () => {
     const currentProgress = viewMode === 'overall' ? weightProgress : progress;
-    const message = getMascotMessage(currentProgress, 'tap');
-    setMascotMessage(message);
-    setLastMascotMessageContext('tap');
+    const messageText = getTapMessage(currentProgress);
+    setMascotMessage({ text: messageText });
+
+    // Trigger small bounce animation on mascot
+    mascotControls.start({
+      scale: [1, 1.05, 1],
+      transition: { duration: 0.3, ease: 'easeOut' },
+    });
 
     // Auto-dismiss after 2.5 seconds
     const timer = setTimeout(() => setMascotMessage(null), 2500);
@@ -312,9 +285,8 @@ function DashboardPageClient() {
 
   // Show greeting message on mount
   useEffect(() => {
-    const greeting = getMascotMessage(0, 'greeting');
-    setMascotMessage(greeting);
-    setLastMascotMessageContext('greeting');
+    const greetingText = "Let's make today count! 💪";
+    setMascotMessage({ text: greetingText });
 
     const timer = setTimeout(() => setMascotMessage(null), 3000);
     return () => clearTimeout(timer);
@@ -454,10 +426,10 @@ function DashboardPageClient() {
           const updatedProfile = await updateStreak(newStreak);
           setUserProfile(updatedProfile);
 
-          // Show mascot reaction to streak increase
-          const streakMessage = getMascotMessage(newStreak * 10, 'streak'); // Scale streak as progress
-          setMascotMessage(streakMessage);
-          setLastMascotMessageContext('streak');
+          // Show mascot reaction to streak increase - use current daily progress
+          const currentProgress = progress;
+          const streakMessage = getStreakMessage(currentProgress);
+          setMascotMessage({ text: streakMessage });
 
           const messageTimer = setTimeout(() => setMascotMessage(null), 2500);
           return () => clearTimeout(messageTimer);
@@ -785,11 +757,9 @@ function DashboardPageClient() {
         setUserProfile(updatedProfile);
       }
 
-      // Show mascot reaction to food being added
-      const currentProgress = viewMode === 'overall' ? weightProgress : progress;
-      const foodMessage = getMascotMessage(currentProgress, 'food');
-      setMascotMessage(foodMessage);
-      setLastMascotMessageContext('food');
+      // Show mascot reaction to food being added - use daily progress for relevance
+      const foodMessageText = getFoodMessage(progress);
+      setMascotMessage({ text: foodMessageText });
 
       const messageTimer = setTimeout(() => setMascotMessage(null), 2000);
       return () => clearTimeout(messageTimer);
@@ -867,11 +837,9 @@ function DashboardPageClient() {
         setUserProfile(updatedProfile);
       }
 
-      // Show mascot reaction to food being added
-      const currentProgress = viewMode === 'overall' ? weightProgress : progress;
-      const foodMessage = getMascotMessage(currentProgress, 'food');
-      setMascotMessage(foodMessage);
-      setLastMascotMessageContext('food');
+      // Show mascot reaction to food being added - use daily progress for relevance
+      const foodMessageText = getFoodMessage(progress);
+      setMascotMessage({ text: foodMessageText });
 
       const messageTimer = setTimeout(() => setMascotMessage(null), 2000);
       return () => clearTimeout(messageTimer);
@@ -1177,7 +1145,7 @@ function DashboardPageClient() {
         </div>
 
         {/* Mascot Section with Gamification */}
-        <div className="px-6 pb-2 pt-2 flex flex-col items-center">
+        <div className="px-6 pt-6 pb-2 flex flex-col items-center">
           {/* Mascot with dynamic state */}
           <div className="relative">
             {/* Background glow effect */}
@@ -1191,7 +1159,7 @@ function DashboardPageClient() {
             />
 
             {/* Fixed container to prevent layout shift */}
-            <div className="relative w-56 h-56 flex items-center justify-center cursor-pointer" onClick={handleMascotTap}>
+            <div className="relative w-56 h-56 flex items-center justify-center">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`${viewMode}-${mascotState.level}`}
@@ -1233,35 +1201,40 @@ function DashboardPageClient() {
                       }}
                       className="w-full h-full"
                     >
-                      <Image
-                        src={mascotState.image}
-                        alt="Capybara mascot"
-                        fill
-                        className="object-contain"
-                        priority
-                      />
+                      {/* Only image is clickable - inline-block for precise touch area */}
+                      <button
+                        onClick={handleMascotTap}
+                        className="inline-block cursor-pointer hover:opacity-80 transition-opacity w-full h-full focus:outline-none"
+                        type="button"
+                        aria-label="Interact with mascot"
+                      >
+                        <Image
+                          src={mascotState.image}
+                          alt="Capybara mascot"
+                          fill
+                          className="object-contain"
+                          priority
+                        />
+                      </button>
                     </motion.div>
                   </motion.div>
                 </motion.div>
               </AnimatePresence>
 
-              {/* Mascot thought bubble message - shows contextual reactions */}
+              {/* Mascot thought bubble message - cloud popping out effect */}
               <AnimatePresence>
                 {mascotMessage && (
                   <motion.div
-                    initial={{ opacity: 0, y: -15, scale: 0.8 }}
-                    animate={{ opacity: 1, y: -30, scale: 1 }}
-                    exit={{ opacity: 0, y: -15, scale: 0.8 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30 bg-white rounded-2xl px-4 py-2 shadow-lg border border-gray-100 whitespace-nowrap"
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: -40, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30 bg-white rounded-2xl px-4 py-2.5 shadow-md border border-gray-100 max-w-[220px]"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{mascotMessage.emoji}</span>
-                      <span className="text-sm font-medium text-gray-800 max-w-xs">
-                        {mascotMessage.text}
-                      </span>
-                    </div>
-                    {/* Tail */}
+                    <p className="text-sm font-medium text-gray-800 text-center leading-snug">
+                      {mascotMessage.text}
+                    </p>
+                    {/* Cloud tail - small triangle pointing down */}
                     <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-gray-100 transform rotate-45" />
                   </motion.div>
                 )}

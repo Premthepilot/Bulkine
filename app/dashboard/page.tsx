@@ -61,36 +61,23 @@ function resetMockUserStartDate(): void {
 }
 
 // Custom hook for tracking scroll direction and hiding header
+// Custom hook for showing header only when at absolute top
 function useScrollHide() {
   const [isVisible, setIsVisible] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => {
-      const currentScrollY = window.scrollY;
+      // Clamp scroll value to prevent negative values from scroll bounce
+      const scrollY = Math.max(window.scrollY, 0);
 
-      // Show header when at top
-      if (currentScrollY < 10) {
-        setIsVisible(true);
-        setLastScrollY(currentScrollY);
-        return;
-      }
-
-      // Hide on scroll down, show on scroll up
-      if (currentScrollY > lastScrollY) {
-        // Scrolling down
-        setIsVisible(false);
-      } else {
-        // Scrolling up
-        setIsVisible(true);
-      }
-
-      setLastScrollY(currentScrollY);
+      // Show header ONLY if at absolute top (scrollY <= 2)
+      // Hide for any scroll position above this threshold
+      setIsVisible(scrollY <= 2);
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollY]);
+  }, []);
 
   return isVisible;
 }
@@ -914,9 +901,9 @@ function DashboardPageClient() {
         {/* Main Content */}
         {!loading && !error && (
         <>
-        {/* Fixed Floating Transparent Header */}
+        {/* Fixed Floating Transparent Header - Appears Only at Top */}
         <header
-          className="fixed top-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-between transition-transform duration-300 ease-in-out"
+          className="fixed top-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-between transition-transform duration-500 ease-in-out"
           style={{
             transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
             textShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',

@@ -29,6 +29,90 @@ interface FoodLogEntry {
   ingredients?: Ingredient[];
 }
 
+// ========== MASCOT BEHAVIOR SYSTEM ==========
+type MascotMood = 'tired' | 'waking' | 'eating' | 'focused' | 'excited' | 'flexing';
+type MessageContext = 'progress' | 'food' | 'streak' | 'idle' | 'greeting' | 'tap';
+
+interface MascotMessage {
+  text: string;
+  emoji: string;
+}
+
+// Dynamic message bank - messages feel conversational and contextual
+const mascotMessageBank: Record<MascotMood, Record<MessageContext, string[]>> = {
+  tired: {
+    progress: ["You've got this! 💪", "Let's start strong!", "First step counts!"],
+    food: ["Every bite helps! 🍔", "Fueling up now! ⚡", "Building foundation!"],
+    streak: ["Day 1 starts now! 🔥", "Beginning of greatness!", "Let's go!"],
+    idle: ["Ready when you are...", "I believe in you!", "Come on, let's move!"],
+    greeting: ["Hi buddy! Ready to grow?", "Let's make today count!", "Time to fuel up! 🍽️"],
+    tap: ["I'm ready! 💪", "Let's do this!", "You got me hyped!"],
+  },
+  waking: {
+    progress: ["Warming up! 💪", "Getting into rhythm!", "Nice pace!"],
+    food: ["That's the way! 🔥", "More fuel = more gains!", "Smart choice! ✨"],
+    streak: ["Growing stronger! 🔥", "Keep this momentum!", "You're on fire!"],
+    idle: ["One more meal incoming?", "You're building something!", "This is solid work!"],
+    greeting: ["Let's keep this going!", "You're waking up! 💪", "I can feel the energy!"],
+    tap: ["We're cooking! 🔥", "This is the way!", "Let's gooo!"],
+  },
+  eating: {
+    progress: ["Steady work! 🎯", "You're in the zone!", "This is the way!"],
+    food: ["Consistency is key! 🏆", "Perfect! Keep it up!", "That's elite eating! 🔥"],
+    streak: ["Days stacking up! 🔥", "The grind pays off!", "Unstoppable!"],
+    idle: ["More growth incoming?", "You're doing amazing!", "Let's fuel some more!"],
+    greeting: ["You know what's up!", "Steady wins the race! 🏆", "Keep crushing it!"],
+    tap: ["That's the energy! ⚡", "Let's go, legend!", "I feel it! 💪"],
+  },
+  focused: {
+    progress: ["This is incredible! 💪", "You're crushing it!", "Peak performance! 🎯"],
+    food: ["THAT'S the strategy! 🔥", "Nutrition like a pro!", "You know your stuff! 🏆"],
+    streak: ["LEGENDARY consistency! 🔥", "You're untouchable!", "An absolute machine!"],
+    idle: ["This pace is elite! 💪", "You're unstoppable!", "Can't stop won't stop!"],
+    greeting: ["Look at you go! 🔥", "You're in the zone!", "This is peak capy energy!"],
+    tap: ["YES! Let's GOOOO! 🚀", "Feeling invincible! 💪", "Peak performance! 🏆"],
+  },
+  excited: {
+    progress: ["SO CLOSE! 🏆", "ALMOST THERE! YOU'VE GOT THIS! 💪", "Final stretch! 🔥"],
+    food: ["YES! FINISH STRONG! 🔥", "That's the final push!", "UNSTOPPABLE NOW! 💪"],
+    streak: ["LEGENDARY STREAK! 🔥🔥", "ABSOLUTELY UNREAL! 🏆", "YOU'RE A BEAST! 💪"],
+    idle: ["One more step! 💪", "I can feel it! 🏆", "We're almost home!"],
+    greeting: ["WE'RE SO CLOSE! 🔥", "Can you feel it? 💪", "This is it! 🏆"],
+    tap: ["LET'S FINISH THIS! 🚀", "FINAL PUSH TIME! 💪", "WE GOT THIS! 🔥"],
+  },
+  flexing: {
+    progress: ["🏆 YOU MADE IT! 🏆", "ABSOLUTE LEGEND! 💪", "PEAK PERFORMANCE! 🔥"],
+    food: ["Maintaining excellence! 🏆", "Champions eat smart! 💪", "The power of consistency! 🔥"],
+    streak: ["UNSTOPPABLE FORCE! 🔥🔥", "LEGENDARY GRIND! 🏆", "YOU'RE ELITE! 💪"],
+    idle: ["You're a champion! 🏆", "Bask in the glory! 💪", "Peak capybara energy! 🔥"],
+    greeting: ["Look at the legend! 🏆", "You're living proof! 💪", "PEAK PERFORMANCE! 🔥"],
+    tap: ["CHAMPION ENERGY! 🏆", "UNSTOPPABLE! 💪", "PEAK FLEX MODE! 🔥"],
+  },
+};
+
+// Get mascot mood based on progress
+const getMascotMood = (progress: number): MascotMood => {
+  if (progress < 1) return 'tired';
+  if (progress < 25) return 'waking';
+  if (progress < 60) return 'eating';
+  if (progress < 90) return 'focused';
+  if (progress < 100) return 'excited';
+  return 'flexing';
+};
+
+// Get contextual message for mascot
+const getMascotMessage = (progress: number, context: MessageContext): MascotMessage => {
+  const mood = getMascotMood(progress);
+  const messages = mascotMessageBank[mood][context];
+  const selectedText = messages[Math.floor(Math.random() * messages.length)];
+
+  return {
+    text: selectedText,
+    emoji: '💭',
+  };
+};
+// ========== END MASCOT BEHAVIOR SYSTEM ==========
+
 // Get or create mock user start date (temporary until backend connects)
 function getMockUserStartDate(): Date {
   if (typeof window === 'undefined') {
@@ -118,6 +202,8 @@ function DashboardPageClient() {
   const [viewMode, setViewMode] = useState<'daily' | 'overall'>('daily');
   const [tempMessage, setTempMessage] = useState<{ text: string; emoji: string } | null>(null);
   const [showCelebration, setShowCelebration] = useState<{ level: number; message: string } | null>(null);
+  const [mascotMessage, setMascotMessage] = useState<MascotMessage | null>(null);
+  const [lastMascotMessageContext, setLastMascotMessageContext] = useState<MessageContext | null>(null);
 
   // DEV ONLY: Test override for weight progress
   const [testWeightProgress, setTestWeightProgress] = useState<number | null>(null);
@@ -211,6 +297,28 @@ function DashboardPageClient() {
     // Cleanup
     return () => clearInterval(interval);
   }, [motivationalMessages.length]);
+
+  // Mascot tap handler - show contextual message
+  const handleMascotTap = () => {
+    const currentProgress = viewMode === 'overall' ? weightProgress : progress;
+    const message = getMascotMessage(currentProgress, 'tap');
+    setMascotMessage(message);
+    setLastMascotMessageContext('tap');
+
+    // Auto-dismiss after 2.5 seconds
+    const timer = setTimeout(() => setMascotMessage(null), 2500);
+    return () => clearTimeout(timer);
+  };
+
+  // Show greeting message on mount
+  useEffect(() => {
+    const greeting = getMascotMessage(0, 'greeting');
+    setMascotMessage(greeting);
+    setLastMascotMessageContext('greeting');
+
+    const timer = setTimeout(() => setMascotMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, []); // Only on mount
 
   // Load user data from local storage on mount
   useEffect(() => {
@@ -345,6 +453,14 @@ function DashboardPageClient() {
         try {
           const updatedProfile = await updateStreak(newStreak);
           setUserProfile(updatedProfile);
+
+          // Show mascot reaction to streak increase
+          const streakMessage = getMascotMessage(newStreak * 10, 'streak'); // Scale streak as progress
+          setMascotMessage(streakMessage);
+          setLastMascotMessageContext('streak');
+
+          const messageTimer = setTimeout(() => setMascotMessage(null), 2500);
+          return () => clearTimeout(messageTimer);
         } catch (error) {
           console.error('Error updating streak:', error);
         }
@@ -491,7 +607,7 @@ function DashboardPageClient() {
         return {
           level: 'strong' as const,
           image: '/mascot/capy-strong.png',
-          size: 'w-56 h-56',
+          size: 'w-64 h-64',
           glow: 'drop-shadow(0 0 24px rgba(249, 115, 22, 0.35))',
           statusText: "You're almost there",
           statusEmoji: '🏆',
@@ -503,7 +619,7 @@ function DashboardPageClient() {
         return {
           level: 'improving' as const,
           image: '/mascot/capy-improving.png',
-          size: 'w-52 h-52',
+          size: 'w-60 h-60',
           glow: 'drop-shadow(0 0 16px rgba(249, 115, 22, 0.2))',
           statusText: "Looking stronger",
           statusEmoji: '💪',
@@ -515,7 +631,7 @@ function DashboardPageClient() {
         return {
           level: 'improving' as const,
           image: '/mascot/capy-improving.png',
-          size: 'w-50 h-50',
+          size: 'w-56 h-56',
           glow: 'drop-shadow(0 0 12px rgba(249, 115, 22, 0.15))',
           statusText: "Building momentum",
           statusEmoji: '📈',
@@ -526,7 +642,7 @@ function DashboardPageClient() {
       return {
         level: 'weak' as const,
         image: '/mascot/capy-workout.png',
-        size: 'w-48 h-48',
+        size: 'w-56 h-56',
         glow: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1))',
         statusText: "Just getting started",
         statusEmoji: '🌱',
@@ -540,7 +656,7 @@ function DashboardPageClient() {
       return {
         level: 'strong' as const,
         image: '/mascot/capy-strong.png',
-        size: 'w-56 h-56',
+        size: 'w-64 h-64',
         glow: 'drop-shadow(0 0 24px rgba(249, 115, 22, 0.35))',
         statusText: "You're on fire",
         statusEmoji: '🔥',
@@ -552,7 +668,7 @@ function DashboardPageClient() {
       return {
         level: 'improving' as const,
         image: '/mascot/capy-improving.png',
-        size: 'w-52 h-52',
+        size: 'w-60 h-60',
         glow: 'drop-shadow(0 0 16px rgba(249, 115, 22, 0.2))',
         statusText: "Getting stronger",
         statusEmoji: '💪',
@@ -563,7 +679,7 @@ function DashboardPageClient() {
     return {
       level: 'weak' as const,
       image: '/mascot/capy-workout.png',
-      size: 'w-48 h-48',
+      size: 'w-56 h-56',
       glow: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1))',
       statusText: "Let's get started",
       statusEmoji: '🌱',
@@ -669,6 +785,15 @@ function DashboardPageClient() {
         setUserProfile(updatedProfile);
       }
 
+      // Show mascot reaction to food being added
+      const currentProgress = viewMode === 'overall' ? weightProgress : progress;
+      const foodMessage = getMascotMessage(currentProgress, 'food');
+      setMascotMessage(foodMessage);
+      setLastMascotMessageContext('food');
+
+      const messageTimer = setTimeout(() => setMascotMessage(null), 2000);
+      return () => clearTimeout(messageTimer);
+
     } catch (error) {
       console.error('Error adding food:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to add food entry';
@@ -741,6 +866,15 @@ function DashboardPageClient() {
       if (updatedProfile) {
         setUserProfile(updatedProfile);
       }
+
+      // Show mascot reaction to food being added
+      const currentProgress = viewMode === 'overall' ? weightProgress : progress;
+      const foodMessage = getMascotMessage(currentProgress, 'food');
+      setMascotMessage(foodMessage);
+      setLastMascotMessageContext('food');
+
+      const messageTimer = setTimeout(() => setMascotMessage(null), 2000);
+      return () => clearTimeout(messageTimer);
 
     } catch (error) {
       console.error('Error adding manual entry:', error);
@@ -1057,7 +1191,7 @@ function DashboardPageClient() {
             />
 
             {/* Fixed container to prevent layout shift */}
-            <div className="relative w-56 h-56 flex items-center justify-center">
+            <div className="relative w-56 h-56 flex items-center justify-center cursor-pointer" onClick={handleMascotTap}>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`${viewMode}-${mascotState.level}`}
@@ -1087,15 +1221,50 @@ function DashboardPageClient() {
                     animate={mascotControls}
                     className="relative w-full h-full"
                   >
-                    <Image
-                      src={mascotState.image}
-                      alt="Capybara mascot"
-                      fill
-                      className="object-contain"
-                      priority
-                    />
+                    {/* Breathing animation - subtle idle motion */}
+                    <motion.div
+                      animate={{
+                        scale: [1, 1.04, 1],
+                      }}
+                      transition={{
+                        duration: 2.5,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }}
+                      className="w-full h-full"
+                    >
+                      <Image
+                        src={mascotState.image}
+                        alt="Capybara mascot"
+                        fill
+                        className="object-contain"
+                        priority
+                      />
+                    </motion.div>
                   </motion.div>
                 </motion.div>
+              </AnimatePresence>
+
+              {/* Mascot thought bubble message - shows contextual reactions */}
+              <AnimatePresence>
+                {mascotMessage && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -15, scale: 0.8 }}
+                    animate={{ opacity: 1, y: -30, scale: 1 }}
+                    exit={{ opacity: 0, y: -15, scale: 0.8 }}
+                    transition={{ duration: 0.3 }}
+                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30 bg-white rounded-2xl px-4 py-2 shadow-lg border border-gray-100 whitespace-nowrap"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{mascotMessage.emoji}</span>
+                      <span className="text-sm font-medium text-gray-800 max-w-xs">
+                        {mascotMessage.text}
+                      </span>
+                    </div>
+                    {/* Tail */}
+                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-gray-100 transform rotate-45" />
+                  </motion.div>
+                )}
               </AnimatePresence>
 
               {/* Floating temporary feedback message - below mascot */}

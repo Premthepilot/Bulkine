@@ -60,10 +60,48 @@ function resetMockUserStartDate(): void {
   }
 }
 
+// Custom hook for tracking scroll direction and hiding header
+function useScrollHide() {
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      // Show header when at top
+      if (currentScrollY < 10) {
+        setIsVisible(true);
+        setLastScrollY(currentScrollY);
+        return;
+      }
+
+      // Hide on scroll down, show on scroll up
+      if (currentScrollY > lastScrollY) {
+        // Scrolling down
+        setIsVisible(false);
+      } else {
+        // Scrolling up
+        setIsVisible(true);
+      }
+
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
+
+  return isVisible;
+}
+
 function DashboardPageClient() {
   const router = useRouter();
   const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Scroll hide header state
+  const headerVisible = useScrollHide();
 
   // Food logging state
   const [foodLog, setFoodLog] = useState<FoodLogEntry[]>([]);
@@ -876,19 +914,25 @@ function DashboardPageClient() {
         {/* Main Content */}
         {!loading && !error && (
         <>
-        {/* Header */}
-        <header className="px-6 pt-8 pb-4 flex items-center justify-between">
+        {/* Fixed Floating Transparent Header */}
+        <header
+          className="fixed top-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-between transition-transform duration-300 ease-in-out"
+          style={{
+            transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
+            textShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+          }}
+        >
           {activeTab === 'streaks' ? (
             /* Streaks Page Header */
             <div className="w-full">
-              <h1 className="text-xl font-semibold text-gray-900">
+              <h1 className="text-lg font-semibold text-gray-900">
                 Streaks
               </h1>
             </div>
           ) : (
             /* Default Header */
             <>
-              <h1 className="text-2xl font-bold text-orange-600 tracking-tight">
+              <h1 className="text-xl font-bold text-orange-600 tracking-tight">
                 BULKINE
               </h1>
 
@@ -920,6 +964,9 @@ function DashboardPageClient() {
             </>
           )}
         </header>
+
+        {/* Content with offset for fixed header */}
+        <div className="pt-16">
 
         {/* Dashboard Tab Content */}
         {activeTab === 'dashboard' && (
@@ -2166,6 +2213,7 @@ function DashboardPageClient() {
         </AnimatePresence>
 
         {/* End of Main Content */}
+        </div>
         </>
         )}
       </div>

@@ -885,6 +885,12 @@ function DashboardPageClient() {
       transition={{ duration: 0.35, ease: "easeInOut" }}
     >
       <div className="w-full max-w-sm min-h-screen bg-[#F8F9FA] flex flex-col overflow-y-auto">
+        {/* Top Gradient Overlay - Soft cloudy fade */}
+        <div className="fixed top-0 left-0 right-0 h-16 z-30 bg-gradient-to-b from-white/80 to-transparent pointer-events-none" />
+
+        {/* Bottom Gradient Overlay - Soft cloudy fade */}
+        <div className="fixed bottom-0 left-0 right-0 h-20 z-30 bg-gradient-to-t from-white/80 to-transparent pointer-events-none" />
+
         {/* Loading State */}
         {loading && (
           <div className="flex-1 flex items-center justify-center">

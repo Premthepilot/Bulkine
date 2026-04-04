@@ -149,6 +149,41 @@ function useScrollLinkedHeader() {
   return headerStyle;
 }
 
+// Custom hook for profile header scroll-linked animation
+// Smoother, shorter range (80px) for premium feel
+function useScrollLinkedProfileHeader() {
+  const [profileHeaderStyle, setProfileHeaderStyle] = useState<{ transform: string; opacity: number }>({
+    transform: 'translateY(0)',
+    opacity: 1,
+  });
+
+  useEffect(() => {
+    const handleScroll = () => {
+      // Clamp scroll value to prevent negative values from scroll bounce
+      const scrollY = Math.max(window.scrollY, 0);
+
+      // Calculate progress (0 to 1) over 80px scroll distance
+      // At scrollY=0: progress=0 (header fully visible)
+      // At scrollY=80: progress=1 (header fully hidden)
+      const progress = Math.min(scrollY / 80, 1);
+
+      // Apply continuous transform and opacity based on scroll
+      const translateY = -progress * 100;
+      const opacity = 1 - progress;
+
+      setProfileHeaderStyle({
+        transform: `translateY(${translateY}%)`,
+        opacity: Math.max(opacity, 0),
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return profileHeaderStyle;
+}
+
 function DashboardPageClient() {
   const router = useRouter();
   const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
@@ -156,6 +191,9 @@ function DashboardPageClient() {
 
   // Scroll-linked header animation
   const headerStyle = useScrollLinkedHeader();
+
+  // Scroll-linked profile header animation (premium smooth fade/slide)
+  const profileHeaderStyle = useScrollLinkedProfileHeader();
 
   // Food logging state
   const [foodLog, setFoodLog] = useState<FoodLogEntry[]>([]);
@@ -205,8 +243,61 @@ function DashboardPageClient() {
   const [email, setEmail] = useState('user@example.com');
   const [showRedesignConfirm, setShowRedesignConfirm] = useState(false);
 
+  // Smart profile state
+  const [profileHeight, setProfileHeight] = useState(180);
+  const [activityLevel, setActivityLevel] = useState('moderate');
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [caloriesMessage, setCaloriesMessage] = useState<string | null>(null);
+  const prevCaloriesTargetRef = useRef<number>(0);
+
   // Floating menu state
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
+
+  // Progress/Gamification state
+  const [userLevel, setUserLevel] = useState(1);
+  const [userXP, setUserXP] = useState(245);
+  const [xpForNextLevel] = useState(500);
+  const [dailyMissions, setDailyMissions] = useState([
+    { id: 1, title: 'Log 3 meals', completed: false },
+    { id: 2, title: 'Reach calorie goal', completed: false },
+    { id: 3, title: 'Stay active', completed: false },
+  ]);
+  const [achievements, setAchievements] = useState([
+    { id: 1, name: 'First Steps', description: 'Log your first meal', unlocked: true, icon: '👣' },
+    { id: 2, name: 'Week Warrior', description: 'Maintain a 7-day streak', unlocked: true, icon: '⚔️' },
+    { id: 3, name: 'Calorie Master', description: 'Hit goal 10 times', unlocked: false, icon: '🎯' },
+    { id: 4, name: 'Level 5', description: 'Reach level 5', unlocked: false, icon: '⭐' },
+  ]);
+  const [totalMealsLogged] = useState(47);
+  const [daysActive] = useState(18);
+  const [showLevelUpAnimation, setShowLevelUpAnimation] = useState(false);
+
+  // Avatar evolution data
+  const avatarEvolution = [
+    { level: 1, name: '🌱 Seedling', description: 'Just starting your journey', emoji: '🌱', color: 'from-green-200 to-green-300' },
+    { level: 2, name: '🌿 Sprout', description: 'Growing stronger each day', emoji: '🌿', color: 'from-green-300 to-green-400' },
+    { level: 3, name: '🌳 Sapling', description: 'Building solid foundation', emoji: '🌳', color: 'from-green-400 to-green-500' },
+    { level: 4, name: '💪 Muscle', description: 'Strength is building', emoji: '💪', color: 'from-red-400 to-red-500' },
+    { level: 5, name: '🏋️ Athlete', description: 'Serious about fitness', emoji: '🏋️', color: 'from-orange-400 to-orange-500' },
+    { level: 6, name: '🥇 Champion', description: 'A true champion', emoji: '🥇', color: 'from-yellow-400 to-yellow-500' },
+    { level: 7, name: '👑 Royalty', description: 'Ruling the fitness realm', emoji: '👑', color: 'from-purple-400 to-purple-500' },
+    { level: 8, name: '🔥 Inferno', description: 'On fire, unstoppable', emoji: '🔥', color: 'from-red-500 to-orange-600' },
+    { level: 9, name: '⭐ Superstar', description: 'A shining example', emoji: '⭐', color: 'from-blue-400 to-blue-500' },
+    { level: 10, name: '🌟 Legend', description: 'The ultimate fitness legend', emoji: '🌟', color: 'from-amber-300 to-amber-500' },
+  ];
+
+  const getCurrentAvatar = () => avatarEvolution[Math.min(userLevel - 1, 9)];
+
+  // Handle level up
+  useEffect(() => {
+    if (userXP >= xpForNextLevel && userLevel < 10) {
+      setShowLevelUpAnimation(true);
+      setUserLevel(prev => prev + 1);
+      setUserXP(0);
+      setTimeout(() => setShowLevelUpAnimation(false), 1500);
+    }
+  }, [userXP, xpForNextLevel, userLevel]);
 
   // Handle scroll lock when menu is open
   useEffect(() => {
@@ -942,6 +1033,66 @@ function DashboardPageClient() {
     }
   };
 
+  // Calculate daily calories based on weight and activity level
+  const calculateDailyCalories = (weight: number, activity: string): number => {
+    const baseCalories = weight * 30;
+    const activityMultipliers: { [key: string]: number } = {
+      sedentary: 1.0,
+      light: 1.1,
+      moderate: 1.2,
+      active: 1.3,
+      veryActive: 1.4,
+    };
+    const multiplier = activityMultipliers[activity] || 1.2;
+    return Math.round(baseCalories * multiplier + 300); // +300 for surplus
+  };
+
+  // Get current weight for calculation (use startingWeight as fallback)
+  const effectiveWeight = currentWeight || startingWeight || 70;
+  const calculatedDailyCalories = calculateDailyCalories(effectiveWeight, activityLevel);
+
+  // Trigger calorie update feedback when calculated calories change
+  useEffect(() => {
+    if (plan && calculatedDailyCalories !== prevCaloriesTargetRef.current && prevCaloriesTargetRef.current !== 0) {
+      // Only show message if value actually changed
+      setCaloriesMessage(`Calories updated to ${calculatedDailyCalories} kcal`);
+      setTimeout(() => setCaloriesMessage(null), 2000);
+    }
+    prevCaloriesTargetRef.current = calculatedDailyCalories;
+  }, [calculatedDailyCalories, plan]);
+
+  // Handle field editing
+  const startEditing = (field: string, value: string | number) => {
+    setEditingField(field);
+    setEditValue(value.toString());
+  };
+
+  const saveFieldEdit = (field: string) => {
+    const value = parseFloat(editValue);
+    if (isNaN(value) || value <= 0) {
+      setEditingField(null);
+      return;
+    }
+
+    // Only update if value actually changed
+    let hasChanged = false;
+    if (field === 'height' && value !== profileHeight) {
+      setProfileHeight(value);
+      hasChanged = true;
+    } else if (field === 'goalWeight' && value !== goalWeight) {
+      setGoalWeight(value);
+      hasChanged = true;
+    } else if (field === 'activity' && editValue !== activityLevel) {
+      setActivityLevel(editValue);
+      hasChanged = true;
+    }
+
+    if (hasChanged) {
+      // Feedback will be shown by useEffect via calculatedDailyCalories change
+      setEditingField(null);
+    }
+  };
+
   // Get total weight gained
   const weightGained = currentWeight - startingWeight;
 
@@ -1000,13 +1151,20 @@ function DashboardPageClient() {
         <header
           className="fixed top-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-between will-change-transform"
           style={{
-            transform: headerStyle.transform,
-            opacity: headerStyle.opacity,
+            transform: activeTab === 'profile' ? profileHeaderStyle.transform : headerStyle.transform,
+            opacity: activeTab === 'profile' ? profileHeaderStyle.opacity : headerStyle.opacity,
             textShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
             transition: 'none', // No transition - animation is tied to scroll
           }}
         >
-          {activeTab === 'streaks' ? (
+          {activeTab === 'profile' ? (
+            /* Profile Page Header - Simple contextual header */
+            <div className="w-full">
+              <h1 className="text-lg font-semibold text-gray-900">
+                Profile
+              </h1>
+            </div>
+          ) : activeTab === 'streaks' ? (
             /* Streaks Page Header */
             <div className="w-full">
               <h1 className="text-lg font-semibold text-gray-900">
@@ -1619,210 +1777,339 @@ function DashboardPageClient() {
 
         {/* Profile Tab Content */}
         {activeTab === 'profile' && (
-          <div className="px-6 pt-4 pb-20 flex-1">
-            {/* Personal Info Section */}
-            <div className="mb-6">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
-                Personal Info
-              </h3>
-              <div className="space-y-3">
-                {/* Username Field */}
-                <div>
-                  <label className="text-xs font-medium text-gray-500 block mb-1">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 rounded-lg border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-transparent transition-all"
-                    placeholder="Enter your name"
-                  />
+          <div className="flex-1 flex flex-col bg-gray-100 pt-16">
+            {/* Header Section - Centered Avatar + Name + Email */}
+            <div className="bg-gray-100 px-6 py-8">
+              <div className="flex flex-col items-center">
+                {/* Avatar Circle */}
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-2xl font-bold mb-3">
+                  {username.charAt(0).toUpperCase()}
                 </div>
 
-                {/* Email Field */}
-                <div>
-                  <label className="text-xs font-medium text-gray-500 block mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 rounded-lg border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-transparent transition-all"
-                    placeholder="your@email.com"
-                  />
+                {/* Username */}
+                <h2 className="text-lg font-bold text-gray-900 text-center">
+                  {username}
+                </h2>
+
+                {/* Email */}
+                <p className="text-sm text-gray-500 text-center mt-1">
+                  {email}
+                </p>
+              </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto bg-gray-100">
+
+            {/* Personal Information Section */}
+            <div>
+              <div className="px-4 mb-2 mt-6">
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase">
+                  Personal Information
+                </h3>
+              </div>
+
+              {/* List Items - White Card */}
+              <div className="mx-4 bg-white rounded-3xl overflow-hidden">
+                {/* Username Row - Editable inline */}
+                <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-600">Username</label>
+                  </div>
+                  {editingField === 'username' ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => {
+                        setUsername(editValue);
+                        setEditingField(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setUsername(editValue);
+                          setEditingField(null);
+                        }
+                        if (e.key === 'Escape') setEditingField(null);
+                      }}
+                      className="text-right text-gray-900 bg-transparent focus:outline-none text-sm"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => startEditing('username', username)}
+                      className="text-right text-gray-900 text-sm flex items-center gap-2 hover:text-orange-500 transition-colors"
+                    >
+                      {username}
+                      <span className="text-gray-400 text-lg">›</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Email Row */}
+                <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-600">Email</label>
+                  </div>
+                  {editingField === 'email' ? (
+                    <input
+                      autoFocus
+                      type="email"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => {
+                        setEmail(editValue);
+                        setEditingField(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setEmail(editValue);
+                          setEditingField(null);
+                        }
+                        if (e.key === 'Escape') setEditingField(null);
+                      }}
+                      className="text-right text-gray-900 bg-transparent focus:outline-none text-sm"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => startEditing('email', email)}
+                      className="text-right text-gray-900 text-sm flex items-center gap-2 hover:text-orange-500 transition-colors"
+                    >
+                      {email}
+                      <span className="text-gray-400 text-lg">›</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Height Row */}
+                <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-600">Height</label>
+                  {editingField === 'height' ? (
+                    <input
+                      autoFocus
+                      type="number"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => saveFieldEdit('height')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveFieldEdit('height');
+                        if (e.key === 'Escape') setEditingField(null);
+                      }}
+                      className="text-right text-gray-900 bg-transparent focus:outline-none text-sm"
+                      placeholder="cm"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => startEditing('height', profileHeight)}
+                      className="text-gray-900 text-sm flex items-center gap-2 hover:text-orange-500 transition-colors"
+                    >
+                      {profileHeight} cm
+                      <span className="text-gray-400 text-lg">›</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Current Weight Row - Links to modal */}
+                <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-600">Current weight</label>
+                  <button
+                    onClick={() => setShowWeightModal(true)}
+                    className="text-gray-900 text-sm flex items-center gap-2 hover:text-orange-500 transition-colors"
+                  >
+                    {currentWeight} kg
+                    <span className="text-gray-400 text-lg">›</span>
+                  </button>
+                </div>
+
+                {/* Goal Weight Row - No bottom border (last item) */}
+                <div className="px-4 py-4 flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-600">Goal weight</label>
+                  {editingField === 'goalWeight' ? (
+                    <input
+                      autoFocus
+                      type="number"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => saveFieldEdit('goalWeight')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveFieldEdit('goalWeight');
+                        if (e.key === 'Escape') setEditingField(null);
+                      }}
+                      className="text-right text-gray-900 bg-transparent focus:outline-none text-sm"
+                      placeholder="kg"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => startEditing('goalWeight', goalWeight)}
+                      className="text-gray-900 text-sm flex items-center gap-2 hover:text-orange-500 transition-colors"
+                    >
+                      {goalWeight} kg
+                      <span className="text-gray-400 text-lg">›</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Body & Goals Section */}
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
-                  Body & Goals
-                </h3>
-                <div className="bg-gray-50 rounded-xl overflow-hidden">
-                  {/* Current Weight - Clickable */}
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between hover:bg-gray-100 transition-colors cursor-pointer">
-                    <span className="text-sm text-gray-600">Current weight</span>
-                    <span className="font-medium text-gray-900">{currentWeight} kg</span>
-                  </div>
-
-                  {/* Goal Weight */}
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Goal weight</span>
-                    <span className="font-medium text-gray-900">{goalWeight} kg</span>
-                  </div>
-
-                  {/* Starting Weight */}
-                  <div className="px-4 py-3 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Starting weight</span>
-                    <span className="font-medium text-gray-900">{startingWeight} kg</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Nutrition Plan Section */}
-              <div>
-                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
+            {/* Nutrition Plan Section */}
+            <div>
+              <div className="px-4 mb-2 mt-6">
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase">
                   Nutrition Plan
                 </h3>
-                <div className="bg-gray-50 rounded-xl overflow-hidden">
-                  {/* Daily Calories */}
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Daily target</span>
-                    <span className="font-medium text-gray-900">{totalTarget + surplus} kcal</span>
-                  </div>
-
-                  {/* Surplus */}
-                  <div className="px-4 py-3 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Surplus</span>
-                    <span className="font-medium text-gray-900">+{surplus} kcal</span>
-                  </div>
-                </div>
               </div>
 
-              {/* Progress Section */}
-              <div>
-                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
-                  Progress Snapshot
-                </h3>
-                <div className="bg-gray-50 rounded-xl overflow-hidden">
-                  {/* Total Change */}
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Total change</span>
-                    <span className={`font-medium ${weightGained >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {weightGained >= 0 ? '+' : ''}{weightGained.toFixed(1)} kg
-                    </span>
-                  </div>
+              {/* List Items - White Card */}
+              <div className="mx-4 bg-white rounded-3xl overflow-hidden">
+                {/* Daily Calories Row */}
+                <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-600">Daily target</label>
+                  <motion.span
+                    key={calculatedDailyCalories}
+                    initial={{ scale: 1.1, color: '#f97316' }}
+                    animate={{ scale: 1, color: '#111827' }}
+                    transition={{ duration: 0.3 }}
+                    className="text-sm font-medium text-gray-900"
+                  >
+                    {calculatedDailyCalories} kcal
+                  </motion.span>
+                </div>
 
-                  {/* Progress Percentage */}
-                  <div className="px-4 py-3 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Goal progress</span>
-                    <span className="font-medium text-gray-900">{Math.round(calculatedWeightProgress)}%</span>
-                  </div>
+                {/* Activity Level Row - No bottom border (last item before feedback) */}
+                <div className="px-4 py-4 flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-600">Activity level</label>
+                  <span className="text-sm text-gray-900">
+                    {activityLevel === 'sedentary' && 'Sedentary'}
+                    {activityLevel === 'light' && 'Light'}
+                    {activityLevel === 'moderate' && 'Moderate'}
+                    {activityLevel === 'active' && 'Active'}
+                    {activityLevel === 'veryActive' && 'Very Active'}
+                  </span>
+                </div>
 
-                  {/* Last Updated */}
-                  {lastWeightUpdate && (
-                    <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Last updated</span>
-                      <span className="text-xs text-gray-600">
-                        {lastWeightUpdate.toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
-                      </span>
-                    </div>
+                {/* Feedback Message - Shows on change */}
+                <AnimatePresence>
+                  {caloriesMessage && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="px-4 py-3 bg-orange-100 border-t border-orange-200 text-center"
+                    >
+                      <p className="text-xs font-medium text-orange-700">
+                        ✓ {caloriesMessage}
+                      </p>
+                    </motion.div>
                   )}
-                </div>
+                </AnimatePresence>
+              </div>
+            </div>
+
+            {/* Activity Level Selector Section */}
+            <div>
+              <div className="px-4 mb-2 mt-6">
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase">
+                  Activity Level
+                </h3>
               </div>
 
-              {/* Stats Section */}
-              <div>
-                <h3 className="text-xs font-bold text-gray-400 tracking-widest mb-3 uppercase">
+              {/* Inset Rounded Container */}
+              <div className="mx-4 bg-white rounded-3xl overflow-hidden">
+                {['sedentary', 'light', 'moderate', 'active', 'veryActive'].map((level, index) => (
+                  <button
+                    key={level}
+                    onClick={() => {
+                      if (activityLevel !== level) {
+                        setActivityLevel(level);
+                      }
+                    }}
+                    className={`w-full px-4 py-4 flex items-center justify-between transition-colors ${
+                      index !== 4 ? 'border-b border-gray-100' : ''
+                    } ${
+                      activityLevel === level ? 'bg-orange-50' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className={`text-sm font-medium ${activityLevel === level ? 'text-orange-700' : 'text-gray-700'}`}>
+                      {level === 'sedentary' && '🛋️ Sedentary'}
+                      {level === 'light' && '🚶 Light'}
+                      {level === 'moderate' && '🏃 Moderate'}
+                      {level === 'active' && '⛹️ Active'}
+                      {level === 'veryActive' && '🏋️ Very Active'}
+                    </span>
+                    {activityLevel === level && (
+                      <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stats Section */}
+            <div>
+              <div className="px-4 mb-2 mt-6">
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase">
                   Stats
                 </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-2xl font-bold text-orange-500">🔥</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">{streak}</p>
-                    <p className="text-xs text-gray-500 mt-1">Day streak</p>
+              </div>
+
+              {/* Inset Rounded Container */}
+              <div className="mx-4 bg-white rounded-3xl overflow-hidden">
+                {/* Streak Row */}
+                <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">🔥</span>
+                    <label className="text-sm font-medium text-gray-600">Day streak</label>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-2xl font-bold text-gray-400">📊</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">{weightHistory.length}</p>
-                    <p className="text-xs text-gray-500 mt-1">Weigh-ins</p>
+                  <span className="text-sm font-bold text-gray-900">{streak}</span>
+                </div>
+
+                {/* Weigh-ins Row - No bottom border (last item) */}
+                <div className="px-4 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">📊</span>
+                    <label className="text-sm font-medium text-gray-600">Weigh-ins</label>
                   </div>
+                  <span className="text-sm font-bold text-gray-900">{weightHistory.length}</span>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-3 pt-2">
-                {/* Update Weight Button */}
-                <button
-                  onClick={() => setShowWeightModal(true)}
-                  className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  Update weight
-                </button>
+            {/* Actions Section */}
+            <div>
+              <div className="px-4 mb-2 mt-6">
+                <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase">
+                  Actions
+                </h3>
+              </div>
 
-                {/* Redesign Plan Button */}
+              {/* Inset Rounded Container */}
+              <div className="mx-4 bg-white rounded-3xl overflow-hidden">
+                {/* Redesign Plan */}
                 <button
                   onClick={() => setShowRedesignConfirm(true)}
-                  className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 border border-gray-200"
+                  className="w-full px-4 py-4 border-b border-gray-100 flex items-center justify-between hover:bg-orange-50 transition-colors"
                 >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  Redesign plan
+                  <span className="text-sm font-medium text-orange-600">Redesign plan</span>
+                  <span className="text-gray-400 text-lg">›</span>
                 </button>
 
-                {/* Logout Button */}
+                {/* Logout - No bottom border (last item) */}
                 <button
                   onClick={() => setShowLogoutConfirm(true)}
-                  className="w-full py-3 bg-gray-50 hover:bg-red-50 text-red-600 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 border border-gray-200"
+                  className="w-full px-4 py-4 flex items-center justify-between hover:bg-red-50 transition-colors"
                 >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                    />
-                  </svg>
-                  Logout
+                  <span className="text-sm font-medium text-red-600">Logout</span>
+                  <span className="text-gray-400 text-lg">›</span>
                 </button>
               </div>
+            </div>
+
+            {/* Bottom Padding */}
+            <div className="h-6" />
+
             </div>
 
             {/* Logout Confirmation Modal */}
@@ -1979,8 +2266,6 @@ function DashboardPageClient() {
             </AnimatePresence>
           </div>
         )}
-
-        {/* Streaks Tab Content */}
         {activeTab === 'streaks' && (
           <div className="px-6 pt-4 pb-6 flex-1">
             {/* Streak Hero Section - Minimal & Compact */}
@@ -2266,6 +2551,243 @@ function DashboardPageClient() {
           </div>
         )}
 
+        {/* Progress Tab Content - Avatar Evolution System */}
+        {activeTab === 'progress' && (
+          <div className="pt-4 pb-20 flex-1 overflow-y-auto">
+            {/* Hero Section - Avatar Display */}
+            <motion.div
+              key={`avatar-${userLevel}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="relative px-6 pt-4"
+            >
+              {/* Level-Up Animation Overlay */}
+              <AnimatePresence>
+                {showLevelUpAnimation && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.3 }}
+                    className="absolute inset-0 z-10 flex items-center justify-center"
+                  >
+                    <div className="text-center">
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                        className="text-6xl mb-3"
+                      >
+                        ✨
+                      </motion.div>
+                      <motion.p
+                        initial={{ y: 10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.1 }}
+                        className="text-xl font-bold text-gray-900 mb-1"
+                      >
+                        Level Up!
+                      </motion.p>
+                      <motion.p
+                        initial={{ y: 10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="text-sm text-gray-600"
+                      >
+                        Evolved to {getCurrentAvatar().name}
+                      </motion.p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Avatar Card */}
+              <div className={`bg-gradient-to-b ${getCurrentAvatar().color} rounded-3xl p-8 text-center shadow-sm mb-4 relative overflow-hidden`}>
+                {/* Background decorative elements */}
+                <div className="absolute top-4 right-4 opacity-10 text-6xl">✨</div>
+
+                {/* Large Avatar Display */}
+                <motion.div
+                  key={`emoji-${userLevel}`}
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.5, ease: 'backOut' }}
+                  className="text-8xl mb-4"
+                >
+                  {getCurrentAvatar().emoji}
+                </motion.div>
+
+                {/* Level & Name */}
+                <div className="mb-4">
+                  <p className="text-sm font-medium text-white/80 mb-1">Level {userLevel} of 10</p>
+                  <h2 className="text-3xl font-black text-white">{getCurrentAvatar().name}</h2>
+                  <p className="text-sm text-white/90 mt-2">{getCurrentAvatar().description}</p>
+                </div>
+
+                {/* XP Progress Bar */}
+                <div className="mb-2 bg-white/20 rounded-full h-4 overflow-hidden">
+                  <motion.div
+                    key={`xp-${userLevel}`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(userXP / xpForNextLevel) * 100}%` }}
+                    transition={{ duration: 0.8, ease: 'easeOut' }}
+                    className="h-full bg-white rounded-full"
+                  />
+                </div>
+                <p className="text-xs text-white/80">{userXP} / {xpForNextLevel} XP</p>
+              </div>
+            </motion.div>
+
+            {/* Evolution Timeline */}
+            <div className="mt-8 mb-6">
+              <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3 px-6">
+                Evolution Path
+              </h3>
+              <div className="overflow-x-auto pb-2">
+                <div className="flex gap-2 px-6 pb-2">
+                  {avatarEvolution.map((avatar) => (
+                    <motion.div
+                      key={avatar.level}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: avatar.level * 0.03 }}
+                      className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all ${
+                        userLevel >= avatar.level
+                          ? `bg-gradient-to-b ${avatar.color} shadow-md`
+                          : 'bg-gray-100'
+                      }`}
+                    >
+                      <div className={`text-4xl ${userLevel >= avatar.level ? 'opacity-100' : 'opacity-40'}`}>
+                        {avatar.emoji}
+                      </div>
+                      <p className={`text-[10px] font-bold mt-1 ${userLevel >= avatar.level ? 'text-white' : 'text-gray-500'}`}>
+                        Lv{avatar.level}
+                      </p>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Content Spacer */}
+            <div className="px-6">
+              {/* Daily Missions Section */}
+              <div className="mt-6">
+              <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3 px-0">
+                Daily Missions
+              </h3>
+              <div className="space-y-2">
+                {dailyMissions.map((mission, index) => (
+                  <motion.button
+                    key={mission.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => {
+                      setDailyMissions(prev =>
+                        prev.map(m => m.id === mission.id ? { ...m, completed: !m.completed } : m)
+                      );
+                      if (!mission.completed) {
+                        setUserXP(prev => Math.min(prev + 50, xpForNextLevel));
+                      }
+                    }}
+                    className="w-full bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow active:scale-95"
+                  >
+                    <motion.div
+                      animate={{ scale: mission.completed ? 1 : 0.9 }}
+                      className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center border-2 ${
+                        mission.completed
+                          ? 'bg-orange-500 border-orange-500'
+                          : 'border-gray-300'
+                      }`}
+                    >
+                      {mission.completed && (
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </motion.div>
+                    <span className={`flex-1 text-left font-medium ${
+                      mission.completed ? 'text-gray-500 line-through' : 'text-gray-900'
+                    }`}>
+                      {mission.title}
+                    </span>
+                    <span className="text-xs font-semibold text-orange-500">+50 XP</span>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stats Section */}
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                className="bg-white rounded-2xl p-4 text-center shadow-sm"
+              >
+                <p className="text-3xl font-black text-orange-500">{totalMealsLogged}</p>
+                <p className="text-xs text-gray-500 mt-2 font-medium">Meals logged</p>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+                className="bg-white rounded-2xl p-4 text-center shadow-sm"
+              >
+                <p className="text-3xl font-black text-blue-500">{daysActive}</p>
+                <p className="text-xs text-gray-500 mt-2 font-medium">Days active</p>
+              </motion.div>
+            </div>
+
+            {/* Achievements Section */}
+            <div className="mt-6">
+              <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3">
+                Achievements
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {achievements.map((achievement, index) => (
+                  <motion.div
+                    key={achievement.id}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`rounded-2xl p-4 text-center ${
+                      achievement.unlocked
+                        ? 'bg-white shadow-sm hover:shadow-md transition-shadow'
+                        : 'bg-gray-100 opacity-50'
+                    }`}
+                  >
+                    <p className="text-3xl mb-2">{achievement.icon}</p>
+                    <p className="text-sm font-semibold text-gray-900">{achievement.name}</p>
+                    <p className="text-xs text-gray-500 mt-1">{achievement.description}</p>
+                    {achievement.unlocked && (
+                      <p className="text-xs text-orange-500 font-bold mt-2">✓ Unlocked</p>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Streak Summary */}
+            <div className="mt-6 bg-white rounded-2xl p-4 text-center shadow-sm">
+              <p className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3">Streaks</p>
+              <div className="flex items-center justify-center gap-4">
+                <div>
+                  <p className="text-3xl font-black text-orange-500">{calculatedStreak}</p>
+                  <p className="text-xs text-gray-500 mt-1">Current</p>
+                </div>
+                <div className="w-px h-12 bg-gray-200" />
+                <div>
+                  <p className="text-3xl font-black text-gray-900">{calculatedStreak}</p>
+                  <p className="text-xs text-gray-500 mt-1">Best</p>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+        )}
+
         {/* Bottom padding for floating menu */}
         <div className="h-8" />
 
@@ -2299,7 +2821,7 @@ function DashboardPageClient() {
                 {[
                   { id: 'dashboard', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
                   { id: 'streaks', label: 'Streaks', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-                  { id: 'nutrition', label: 'Food', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+                  { id: 'progress', label: 'Progress', icon: 'M12 8c-1.657 0-3 .895-3 2v6c0 1.105 1.343 2 3 2s3-.895 3-2v-6c0-1.105-1.343-2-3-2z' },
                   { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
                 ].map((tab, index) => (
                   <motion.button

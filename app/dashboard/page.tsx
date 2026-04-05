@@ -259,10 +259,16 @@ function DashboardPageClient() {
   const [userXP, setUserXP] = useState(245);
   const [xpForNextLevel] = useState(500);
   const [dailyMissions, setDailyMissions] = useState([
-    { id: 1, title: 'Log 3 meals', completed: false },
-    { id: 2, title: 'Reach calorie goal', completed: false },
-    { id: 3, title: 'Stay active', completed: false },
+    { id: 1, title: 'Complete 80% of Calorie Goal', completed: false, xpReward: 20, type: 'daily', progress: 0 },
+    { id: 2, title: 'Log 3 Meals', completed: false, xpReward: 20, type: 'daily', progress: 0 },
+    { id: 3, title: 'Hit Your Calorie Goal', completed: false, xpReward: 20, type: 'daily', progress: 0 },
   ]);
+  const [weeklyMissions, setWeeklyMissions] = useState([
+    { id: 4, title: 'Maintain Your Streak', completed: false, xpReward: 80, type: 'weekly', progress: 0 },
+    { id: 5, title: 'Log Meals 5 Days', completed: false, xpReward: 80, type: 'weekly', progress: 0 },
+    { id: 6, title: 'Hit Goal 3 Times', completed: false, xpReward: 80, type: 'weekly', progress: 0 },
+  ]);
+  const [showMissionsTab, setShowMissionsTab] = useState(false);
   const [achievements, setAchievements] = useState([
     { id: 1, name: 'First Steps', description: 'Log your first meal', unlocked: true, icon: '👣' },
     { id: 2, name: 'Week Warrior', description: 'Maintain a 7-day streak', unlocked: true, icon: '⚔️' },
@@ -273,31 +279,47 @@ function DashboardPageClient() {
   const [daysActive] = useState(18);
   const [showLevelUpAnimation, setShowLevelUpAnimation] = useState(false);
 
-  // Avatar evolution data
+  // Avatar evolution data - 5 levels with PNG images
   const avatarEvolution = [
-    { level: 1, name: '🌱 Seedling', description: 'Just starting your journey', emoji: '🌱', color: 'from-green-200 to-green-300' },
-    { level: 2, name: '🌿 Sprout', description: 'Growing stronger each day', emoji: '🌿', color: 'from-green-300 to-green-400' },
-    { level: 3, name: '🌳 Sapling', description: 'Building solid foundation', emoji: '🌳', color: 'from-green-400 to-green-500' },
-    { level: 4, name: '💪 Muscle', description: 'Strength is building', emoji: '💪', color: 'from-red-400 to-red-500' },
-    { level: 5, name: '🏋️ Athlete', description: 'Serious about fitness', emoji: '🏋️', color: 'from-orange-400 to-orange-500' },
-    { level: 6, name: '🥇 Champion', description: 'A true champion', emoji: '🥇', color: 'from-yellow-400 to-yellow-500' },
-    { level: 7, name: '👑 Royalty', description: 'Ruling the fitness realm', emoji: '👑', color: 'from-purple-400 to-purple-500' },
-    { level: 8, name: '🔥 Inferno', description: 'On fire, unstoppable', emoji: '🔥', color: 'from-red-500 to-orange-600' },
-    { level: 9, name: '⭐ Superstar', description: 'A shining example', emoji: '⭐', color: 'from-blue-400 to-blue-500' },
-    { level: 10, name: '🌟 Legend', description: 'The ultimate fitness legend', emoji: '🌟', color: 'from-amber-300 to-amber-500' },
+    { level: 1, name: 'Beginner', description: 'Just starting your journey', image: '/levels/Level_1.png' },
+    { level: 2, name: 'Consistent', description: 'Growing stronger each day', image: '/levels/Level_2.png' },
+    { level: 3, name: 'Strong', description: 'Building solid foundation', image: '/levels/Level_3.png' },
+    { level: 4, name: 'Athlete', description: 'Serious about fitness', image: '/levels/Level_4.png' },
+    { level: 5, name: 'Legend', description: 'The ultimate fitness legend', image: '/levels/Level_5.png' },
   ];
 
-  const getCurrentAvatar = () => avatarEvolution[Math.min(userLevel - 1, 9)];
+  const getCurrentAvatar = () => avatarEvolution[Math.min(userLevel - 1, 4)];
 
   // Handle level up
   useEffect(() => {
-    if (userXP >= xpForNextLevel && userLevel < 10) {
+    if (userXP >= xpForNextLevel && userLevel < 5) {
       setShowLevelUpAnimation(true);
       setUserLevel(prev => prev + 1);
       setUserXP(0);
       setTimeout(() => setShowLevelUpAnimation(false), 1500);
     }
   }, [userXP, xpForNextLevel, userLevel]);
+
+  // Load missions from localStorage on mount
+  useEffect(() => {
+    const savedDaily = localStorage.getItem('dailyMissions');
+    const savedWeekly = localStorage.getItem('weeklyMissions');
+
+    if (savedDaily) {
+      try {
+        setDailyMissions(JSON.parse(savedDaily));
+      } catch (e) {
+        console.error('Failed to load daily missions from localStorage');
+      }
+    }
+    if (savedWeekly) {
+      try {
+        setWeeklyMissions(JSON.parse(savedWeekly));
+      } catch (e) {
+        console.error('Failed to load weekly missions from localStorage');
+      }
+    }
+  }, []);
 
   // Handle scroll lock when menu is open
   useEffect(() => {
@@ -536,6 +558,87 @@ function DashboardPageClient() {
 
   const caloriesConsumed = foodLog.reduce((sum, entry) => sum + entry.kcal, 0);
   const progress = totalTarget > 0 ? Math.min((caloriesConsumed / totalTarget) * 100, 100) : 0;
+
+  // Auto-complete missions based on progress and persist to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return; // Skip on server
+
+    // Calculate current progress metrics
+    const mealCount = foodLog.length;
+    const streakValue = streak || 0;
+    const goalProgress = progress;
+
+    // Update daily missions
+    const updatedDaily = dailyMissions.map(mission => {
+      let missionProgress = 0;
+      let shouldComplete = false;
+
+      if (mission.id === 1) {
+        // 80% calorie goal
+        missionProgress = Math.min(goalProgress / 80, 1);
+        shouldComplete = goalProgress >= 80;
+      } else if (mission.id === 2) {
+        // Log 3 meals
+        missionProgress = Math.min(mealCount / 3, 1);
+        shouldComplete = mealCount >= 3;
+      } else if (mission.id === 3) {
+        // Hit calorie goal (100%)
+        missionProgress = Math.min(goalProgress / 100, 1);
+        shouldComplete = goalProgress >= 100;
+      }
+
+      if (!mission.completed && shouldComplete) {
+        // Auto-complete and award XP
+        setUserXP(prev => prev + mission.xpReward);
+        return { ...mission, completed: true, progress: 1 };
+      }
+
+      return { ...mission, progress: missionProgress };
+    });
+
+    // Check for daily bonus (all 3 completed)
+    const allDailyComplete = updatedDaily.every(m => m.completed);
+    const previousAllDailyComplete = dailyMissions.every(m => m.completed);
+    if (allDailyComplete && !previousAllDailyComplete) {
+      // Give bonus for completing all daily missions
+      setUserXP(prev => prev + 40);
+    }
+
+    setDailyMissions(updatedDaily);
+
+    // Update weekly missions
+    const updatedWeekly = weeklyMissions.map(mission => {
+      let missionProgress = 0;
+      let shouldComplete = false;
+
+      if (mission.id === 4) {
+        // Maintain streak
+        missionProgress = Math.min(streakValue / Math.max(streakValue, 7), 1);
+        shouldComplete = streakValue > 0;
+      } else if (mission.id === 5) {
+        // Log meals 5 days (using daysActive as proxy)
+        missionProgress = Math.min(daysActive / 5, 1);
+        shouldComplete = daysActive >= 5;
+      } else if (mission.id === 6) {
+        // Hit goal multiple times (we'll use a simplified metric)
+        missionProgress = Math.min(Math.floor(goalProgress / 100) / 3, 1);
+        shouldComplete = Math.floor(goalProgress / 100) >= 3;
+      }
+
+      if (!mission.completed && shouldComplete) {
+        setUserXP(prev => prev + mission.xpReward);
+        return { ...mission, completed: true, progress: 1 };
+      }
+
+      return { ...mission, progress: missionProgress };
+    });
+
+    setWeeklyMissions(updatedWeekly);
+
+    // Persist to localStorage
+    localStorage.setItem('dailyMissions', JSON.stringify(updatedDaily));
+    localStorage.setItem('weeklyMissions', JSON.stringify(updatedWeekly));
+  }, [foodLog.length, streak, progress, daysActive, dailyMissions, weeklyMissions]);
 
   // Get current weight (latest entry or starting weight)
   const currentWeight = weightHistory.length > 0
@@ -1162,6 +1265,13 @@ function DashboardPageClient() {
             <div className="w-full">
               <h1 className="text-lg font-semibold text-gray-900">
                 Profile
+              </h1>
+            </div>
+          ) : activeTab === 'progress' ? (
+            /* Progress Page Header */
+            <div className="w-full">
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                Progress
               </h1>
             </div>
           ) : activeTab === 'streaks' ? (
@@ -2551,240 +2661,260 @@ function DashboardPageClient() {
           </div>
         )}
 
-        {/* Progress Tab Content - Avatar Evolution System */}
+        {/* Progress Tab Content */}
         {activeTab === 'progress' && (
-          <div className="pt-4 pb-20 flex-1 overflow-y-auto">
-            {/* Hero Section - Avatar Display */}
-            <motion.div
-              key={`avatar-${userLevel}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="relative px-6 pt-4"
-            >
-              {/* Level-Up Animation Overlay */}
-              <AnimatePresence>
-                {showLevelUpAnimation && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute inset-0 z-10 flex items-center justify-center"
-                  >
-                    <div className="text-center">
-                      <motion.div
-                        animate={{ scale: [1, 1.2, 1] }}
-                        transition={{ duration: 0.5, ease: 'easeOut' }}
-                        className="text-6xl mb-3"
-                      >
-                        ✨
-                      </motion.div>
-                      <motion.p
-                        initial={{ y: 10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.1 }}
-                        className="text-xl font-bold text-gray-900 mb-1"
-                      >
-                        Level Up!
-                      </motion.p>
-                      <motion.p
-                        initial={{ y: 10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.2 }}
-                        className="text-sm text-gray-600"
-                      >
-                        Evolved to {getCurrentAvatar().name}
-                      </motion.p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Avatar Card */}
-              <div className={`bg-gradient-to-b ${getCurrentAvatar().color} rounded-3xl p-8 text-center shadow-sm mb-4 relative overflow-hidden`}>
-                {/* Background decorative elements */}
-                <div className="absolute top-4 right-4 opacity-10 text-6xl">✨</div>
-
-                {/* Large Avatar Display */}
-                <motion.div
-                  key={`emoji-${userLevel}`}
-                  initial={{ scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.5, ease: 'backOut' }}
-                  className="text-8xl mb-4"
-                >
-                  {getCurrentAvatar().emoji}
-                </motion.div>
-
-                {/* Level & Name */}
-                <div className="mb-4">
-                  <p className="text-sm font-medium text-white/80 mb-1">Level {userLevel} of 10</p>
-                  <h2 className="text-3xl font-black text-white">{getCurrentAvatar().name}</h2>
-                  <p className="text-sm text-white/90 mt-2">{getCurrentAvatar().description}</p>
-                </div>
-
-                {/* XP Progress Bar */}
-                <div className="mb-2 bg-white/20 rounded-full h-4 overflow-hidden">
-                  <motion.div
-                    key={`xp-${userLevel}`}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(userXP / xpForNextLevel) * 100}%` }}
-                    transition={{ duration: 0.8, ease: 'easeOut' }}
-                    className="h-full bg-white rounded-full"
-                  />
-                </div>
-                <p className="text-xs text-white/80">{userXP} / {xpForNextLevel} XP</p>
+          <div className="w-full bg-gray-50 min-h-screen pt-12 pb-20">
+            {/* Avatar Section - Pure vertical flow */}
+            <div className="flex flex-col items-center px-4 mb-6 -mt-2">
+              {/* Avatar Image */}
+              <div className="mb-4" style={{ width: '320px', height: '320px' }}>
+                <Image
+                  src={getCurrentAvatar().image}
+                  alt={getCurrentAvatar().name}
+                  width={320}
+                  height={320}
+                  className="object-contain w-full h-full"
+                  priority
+                />
               </div>
-            </motion.div>
 
-            {/* Evolution Timeline */}
-            <div className="mt-8 mb-6">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3 px-6">
-                Evolution Path
-              </h3>
-              <div className="overflow-x-auto pb-2">
-                <div className="flex gap-2 px-6 pb-2">
-                  {avatarEvolution.map((avatar) => (
-                    <motion.div
-                      key={avatar.level}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: avatar.level * 0.03 }}
-                      className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all ${
+              {/* Level Name */}
+              <h2 className="text-xl font-semibold text-gray-900 mb-1">
+                {getCurrentAvatar().name}
+              </h2>
+
+              {/* Level Info */}
+              <p className="text-sm text-gray-600 mb-6">
+                Level {userLevel} of 5
+              </p>
+
+              {/* XP Text */}
+              <p className="text-xs font-medium text-gray-600 mb-2">
+                {userXP} / {xpForNextLevel} XP
+              </p>
+
+              {/* XP Progress Bar */}
+              <div className="w-full max-w-sm h-3 bg-gray-200 rounded-full overflow-hidden">
+                <motion.div
+                  key={`xp-${userLevel}`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(userXP / xpForNextLevel) * 100}%` }}
+                  transition={{ duration: 0.7, ease: 'easeOut' }}
+                  className="h-full bg-gradient-to-r from-orange-400 to-orange-600 rounded-full"
+                />
+              </div>
+            </div>
+
+            {/* Level Cards - Pyramid Layout */}
+            <div className="flex flex-col items-center mt-6">
+              {/* First Row - 3 Avatars */}
+              <div className="flex justify-center gap-6">
+                {avatarEvolution.slice(0, 3).map((avatar) => (
+                  <div
+                    key={avatar.level}
+                    className="flex flex-col items-center"
+                  >
+                    {/* Avatar Card */}
+                    <div
+                      className={`relative w-20 h-20 rounded-full mb-2 flex items-center justify-center transition-all ${
                         userLevel >= avatar.level
-                          ? `bg-gradient-to-b ${avatar.color} shadow-md`
+                          ? userLevel === avatar.level
+                            ? 'bg-white shadow-md ring-2 ring-orange-500 scale-105'
+                            : 'bg-white shadow-sm'
                           : 'bg-gray-100'
                       }`}
                     >
-                      <div className={`text-4xl ${userLevel >= avatar.level ? 'opacity-100' : 'opacity-40'}`}>
-                        {avatar.emoji}
+                      <div className={`relative w-16 h-16 ${userLevel >= avatar.level ? 'opacity-100' : 'opacity-40'}`}>
+                        <Image
+                          src={avatar.image}
+                          alt={`Level ${avatar.level}`}
+                          width={64}
+                          height={64}
+                          className="object-contain w-full h-full"
+                        />
                       </div>
-                      <p className={`text-[10px] font-bold mt-1 ${userLevel >= avatar.level ? 'text-white' : 'text-gray-500'}`}>
-                        Lv{avatar.level}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            </div>
 
-            {/* Content Spacer */}
-            <div className="px-6">
-              {/* Daily Missions Section */}
-              <div className="mt-6">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3 px-0">
-                Daily Missions
-              </h3>
-              <div className="space-y-2">
-                {dailyMissions.map((mission, index) => (
-                  <motion.button
-                    key={mission.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    onClick={() => {
-                      setDailyMissions(prev =>
-                        prev.map(m => m.id === mission.id ? { ...m, completed: !m.completed } : m)
-                      );
-                      if (!mission.completed) {
-                        setUserXP(prev => Math.min(prev + 50, xpForNextLevel));
-                      }
-                    }}
-                    className="w-full bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow active:scale-95"
+                      {/* Lock Icon */}
+                      {userLevel < avatar.level && (
+                        <div className="absolute inset-0 rounded-full bg-black/5 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Level Label */}
+                    <span className={`text-xs font-semibold ${userLevel >= avatar.level ? 'text-gray-900' : 'text-gray-400'}`}>
+                      Lv {avatar.level}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Second Row - 2 Avatars */}
+              <div className="flex justify-center gap-6 mt-4">
+                {avatarEvolution.slice(3, 5).map((avatar) => (
+                  <div
+                    key={avatar.level}
+                    className="flex flex-col items-center"
                   >
-                    <motion.div
-                      animate={{ scale: mission.completed ? 1 : 0.9 }}
-                      className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center border-2 ${
-                        mission.completed
-                          ? 'bg-orange-500 border-orange-500'
-                          : 'border-gray-300'
+                    {/* Avatar Card */}
+                    <div
+                      className={`relative w-20 h-20 rounded-full mb-2 flex items-center justify-center transition-all ${
+                        userLevel >= avatar.level
+                          ? userLevel === avatar.level
+                            ? 'bg-white shadow-md ring-2 ring-orange-500 scale-105'
+                            : 'bg-white shadow-sm'
+                          : 'bg-gray-100'
                       }`}
                     >
-                      {mission.completed && (
-                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
+                      <div className={`relative w-16 h-16 ${userLevel >= avatar.level ? 'opacity-100' : 'opacity-40'}`}>
+                        <Image
+                          src={avatar.image}
+                          alt={`Level ${avatar.level}`}
+                          width={64}
+                          height={64}
+                          className="object-contain w-full h-full"
+                        />
+                      </div>
+
+                      {/* Lock Icon */}
+                      {userLevel < avatar.level && (
+                        <div className="absolute inset-0 rounded-full bg-black/5 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
                       )}
-                    </motion.div>
-                    <span className={`flex-1 text-left font-medium ${
-                      mission.completed ? 'text-gray-500 line-through' : 'text-gray-900'
-                    }`}>
-                      {mission.title}
+                    </div>
+
+                    {/* Level Label */}
+                    <span className={`text-xs font-semibold ${userLevel >= avatar.level ? 'text-gray-900' : 'text-gray-400'}`}>
+                      Lv {avatar.level}
                     </span>
-                    <span className="text-xs font-semibold text-orange-500">+50 XP</span>
-                  </motion.button>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Stats Section */}
-            <div className="mt-6 grid grid-cols-2 gap-4">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.1 }}
-                className="bg-white rounded-2xl p-4 text-center shadow-sm"
-              >
-                <p className="text-3xl font-black text-orange-500">{totalMealsLogged}</p>
-                <p className="text-xs text-gray-500 mt-2 font-medium">Meals logged</p>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.2 }}
-                className="bg-white rounded-2xl p-4 text-center shadow-sm"
-              >
-                <p className="text-3xl font-black text-blue-500">{daysActive}</p>
-                <p className="text-xs text-gray-500 mt-2 font-medium">Days active</p>
-              </motion.div>
-            </div>
+            {/* Missions Section */}
+            <div className="mt-8 w-full px-4">
+              {/* Missions Heading */}
+              <h2 className="text-2xl font-bold text-gray-900 px-4 mb-4">
+                Missions
+              </h2>
 
-            {/* Achievements Section */}
-            <div className="mt-6">
-              <h3 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3">
-                Achievements
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {achievements.map((achievement, index) => (
+              {/* Toggle Buttons */}
+              <div className="flex gap-2 mb-6 justify-center">
+                <button
+                  onClick={() => setShowMissionsTab(false)}
+                  className={`px-6 py-2 rounded-full font-medium transition-all ${
+                    !showMissionsTab
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  Daily
+                </button>
+                <button
+                  onClick={() => setShowMissionsTab(true)}
+                  className={`px-6 py-2 rounded-full font-medium transition-all ${
+                    showMissionsTab
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  Weekly
+                </button>
+              </div>
+
+              {/* Mission Cards */}
+              <div className="space-y-3">
+                {(showMissionsTab ? weeklyMissions : dailyMissions).map(mission => (
                   <motion.div
-                    key={achievement.id}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`rounded-2xl p-4 text-center ${
-                      achievement.unlocked
-                        ? 'bg-white shadow-sm hover:shadow-md transition-shadow'
-                        : 'bg-gray-100 opacity-50'
-                    }`}
+                    key={mission.id}
+                    className="bg-white rounded-2xl p-4 transition-all"
+                    animate={mission.completed ? { scale: 0.98, opacity: 0.7 } : {}}
                   >
-                    <p className="text-3xl mb-2">{achievement.icon}</p>
-                    <p className="text-sm font-semibold text-gray-900">{achievement.name}</p>
-                    <p className="text-xs text-gray-500 mt-1">{achievement.description}</p>
-                    {achievement.unlocked && (
-                      <p className="text-xs text-orange-500 font-bold mt-2">✓ Unlocked</p>
-                    )}
+                    {/* Mission Header - Title and XP */}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className={`font-medium text-sm ${
+                        mission.completed
+                          ? 'text-gray-400 line-through'
+                          : 'text-gray-800'
+                      }`}>
+                        {mission.title}
+                      </span>
+                      <span className={`font-semibold text-sm ${
+                        mission.completed
+                          ? 'text-orange-500 opacity-70'
+                          : 'text-orange-500'
+                      }`}>
+                        +{mission.xpReward}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <motion.div
+                        animate={{ width: `${mission.completed ? 100 : Math.min((mission.progress || 0) * 100, 100)}%` }}
+                        className="h-full bg-orange-500 rounded-full"
+                        transition={{ duration: 0.5 }}
+                      />
+                    </div>
                   </motion.div>
                 ))}
               </div>
+
+              {/* Daily Bonus Info */}
+              {!showMissionsTab && (
+                <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+                  <p className="text-sm font-medium text-orange-900">
+                    Complete all daily missions for <span className="font-bold">+40 XP</span> bonus!
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Streak Summary */}
-            <div className="mt-6 bg-white rounded-2xl p-4 text-center shadow-sm">
-              <p className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-3">Streaks</p>
-              <div className="flex items-center justify-center gap-4">
-                <div>
-                  <p className="text-3xl font-black text-orange-500">{calculatedStreak}</p>
-                  <p className="text-xs text-gray-500 mt-1">Current</p>
-                </div>
-                <div className="w-px h-12 bg-gray-200" />
-                <div>
-                  <p className="text-3xl font-black text-gray-900">{calculatedStreak}</p>
-                  <p className="text-xs text-gray-500 mt-1">Best</p>
-                </div>
-              </div>
-            </div>
-            </div>
+            {/* Level Up Animation */}
+            <AnimatePresence>
+              {showLevelUpAnimation && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.3 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center"
+                >
+                  <div className="text-center bg-white rounded-3xl px-8 py-6 shadow-lg">
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                      className="text-6xl mb-3"
+                    >
+                      ✨
+                    </motion.div>
+                    <motion.p
+                      initial={{ y: 10, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.1 }}
+                      className="text-xl font-bold text-gray-900 mb-1"
+                    >
+                      Level Up!
+                    </motion.p>
+                    <motion.p
+                      initial={{ y: 10, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                      className="text-sm text-gray-600"
+                    >
+                      You are now a {getCurrentAvatar().name}
+                    </motion.p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
 
@@ -2804,6 +2934,36 @@ function DashboardPageClient() {
             />
           )}
         </AnimatePresence>
+
+        {/* DEV ONLY: Level/XP Testing Panel */}
+        {true && (
+          <div className="fixed bottom-20 right-4 flex flex-col gap-2 z-50">
+            <button
+              onClick={() => setUserLevel(prev => Math.min(prev + 1, 5))}
+              className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-orange-600 transition-colors font-medium"
+            >
+              + Level
+            </button>
+            <button
+              onClick={() => setUserLevel(prev => Math.max(prev - 1, 1))}
+              className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-orange-600 transition-colors font-medium"
+            >
+              - Level
+            </button>
+            <button
+              onClick={() => setUserXP(prev => prev + 50)}
+              className="bg-blue-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-blue-600 transition-colors font-medium"
+            >
+              +50 XP
+            </button>
+            <button
+              onClick={() => setUserXP(0)}
+              className="bg-gray-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-gray-600 transition-colors font-medium"
+            >
+              Reset XP
+            </button>
+          </div>
+        )}
 
         {/* Floating Expandable Menu (FAB Style) - Rendered AFTER overlay, stays above */}
         <div className="fixed bottom-4 right-4 z-50">

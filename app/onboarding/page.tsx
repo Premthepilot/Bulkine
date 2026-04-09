@@ -698,7 +698,7 @@ export default function OnboardingPage() {
   return (
     <div className="fixed inset-0 h-screen bg-white flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-100 px-6 py-5">
+      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm px-6 py-5">
         <div className="max-w-sm mx-auto">
           <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />
         </div>

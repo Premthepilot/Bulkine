@@ -17,7 +17,8 @@ import {
   updateStreak,
   syncUserData,
   getCurrentUser,
-  migrateOldLocalStorage
+  migrateOldLocalStorage,
+  cleanupOldFoodLogs
 } from '@/lib/local-data';
 
 interface FoodLogEntry {
@@ -393,6 +394,9 @@ function DashboardPageClient() {
         // Migrate old localStorage format if needed
         await migrateOldLocalStorage();
 
+        // Clean up old food logs (keep only today's)
+        await cleanupOldFoodLogs();
+
         // Get current user (local)
         const user = await getCurrentUser();
         console.log('[Dashboard] Current user:', user ? { id: user.id, email: user.email } : 'null');
@@ -486,6 +490,55 @@ function DashboardPageClient() {
 
     loadUserData();
   }, []); // Removed router dependency since we're not using redirects
+
+  // Set up midnight reset timer
+  useEffect(() => {
+    const setupMidnightReset = () => {
+      // Calculate time until midnight
+      const now = new Date();
+      const midnight = new Date();
+      midnight.setHours(24, 0, 0, 0); // Set to next midnight
+      const timeUntilMidnight = midnight.getTime() - now.getTime();
+
+      // Schedule cleanup at midnight
+      const midnightTimer = setTimeout(async () => {
+        console.log('[Dashboard] Midnight reset triggered - cleaning up old food logs');
+        await cleanupOldFoodLogs();
+
+        // Reload food logs for new day
+        const today = new Date().toISOString().split('T')[0];
+        const todaysFoodLogs = await getFoodLogsByDate(today);
+        const formattedLogs = todaysFoodLogs.map((log: any) => ({
+          id: log.id,
+          name: log.food_name || log.name,
+          kcal: log.kcal || log.calories,
+          emoji: log.emoji || '🍽️',
+          timestamp: new Date(log.logged_at || log.timestamp).getTime(),
+          ingredients: log.ingredients || []
+        }));
+        setFoodLog(formattedLogs);
+
+        // Show new day message
+        setTempMessage({
+          text: "New day. Let's grow",
+          emoji: '💪',
+        });
+        setTimeout(() => setTempMessage(null), 2000);
+
+        // Reschedule for next midnight
+        setupMidnightReset();
+      }, timeUntilMidnight);
+
+      return midnightTimer;
+    };
+
+    const timerId = setupMidnightReset();
+
+    // Cleanup timer on unmount
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
+  }, []);
 
   // Handle streak updates when food is logged
   useEffect(() => {
@@ -841,7 +894,7 @@ function DashboardPageClient() {
       });
     }
     prevCaloriesRef.current = caloriesConsumed;
-  }, [caloriesConsumed, mascotControls, plan]);
+  }, [caloriesConsumed, plan]);
 
   // Show celebration on milestone threshold crossings (Overall mode only)
   useEffect(() => {
@@ -1102,13 +1155,16 @@ function DashboardPageClient() {
   };
 
   // Redesign plan handler
-  const handleRedesignPlan = async () => {
+  const handleRedesignPlan = () => {
+    console.log('Redesign plan clicked');
     try {
       // Clear plan and onboarding data
       localStorage.removeItem('userPlan');
       localStorage.removeItem('onboardingData');
+      console.log('Cleared localStorage, navigating to onboarding');
 
-      // Redirect to onboarding
+      // Close modal and navigate
+      setShowRedesignConfirm(false);
       router.push('/onboarding');
     } catch (error) {
       console.error('Error redesigning plan:', error);
@@ -1117,20 +1173,17 @@ function DashboardPageClient() {
   };
 
   // Logout handler
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    console.log('Logout clicked');
     try {
       setLoggingOut(true);
-      console.log('Logging out user...');
 
-      // For local storage mode, just redirect to home
-      console.log('Logout successful, redirecting to home');
-
-      // Redirect to home/opening page
+      // Close modal and navigate
+      setShowLogoutConfirm(false);
+      console.log('Navigating to home');
       router.replace('/');
     } catch (error) {
       console.error('Error during logout:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to logout';
-      setError(errorMessage);
       setLoggingOut(false);
       setShowLogoutConfirm(false);
     }
@@ -2929,44 +2982,14 @@ function DashboardPageClient() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/10 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/10 backdrop-blur-sm"
               onClick={() => setShowFloatingMenu(false)}
             />
           )}
         </AnimatePresence>
 
-        {/* DEV ONLY: Level/XP Testing Panel */}
-        {true && (
-          <div className="fixed bottom-20 right-4 flex flex-col gap-2 z-50">
-            <button
-              onClick={() => setUserLevel(prev => Math.min(prev + 1, 5))}
-              className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-orange-600 transition-colors font-medium"
-            >
-              + Level
-            </button>
-            <button
-              onClick={() => setUserLevel(prev => Math.max(prev - 1, 1))}
-              className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-orange-600 transition-colors font-medium"
-            >
-              - Level
-            </button>
-            <button
-              onClick={() => setUserXP(prev => prev + 50)}
-              className="bg-blue-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-blue-600 transition-colors font-medium"
-            >
-              +50 XP
-            </button>
-            <button
-              onClick={() => setUserXP(0)}
-              className="bg-gray-500 text-white px-3 py-2 rounded-lg text-sm shadow-md hover:bg-gray-600 transition-colors font-medium"
-            >
-              Reset XP
-            </button>
-          </div>
-        )}
-
         {/* Floating Expandable Menu (FAB Style) - Rendered AFTER overlay, stays above */}
-        <div className="fixed bottom-4 right-4 z-50">
+        <div className="fixed bottom-4 right-4 z-[51]">
 
           {/* Menu Items Container */}
           <AnimatePresence>

@@ -18,15 +18,23 @@ import {
   syncUserData,
   getCurrentUser,
   migrateOldLocalStorage,
-  cleanupOldFoodLogs
+  cleanupOldFoodLogs,
+  isStreakCompleted,
+  updateStreakForDay,
+  getStreakStatus,
+  getStreakDatesForMonth,
+  getUserData,
+  setUserData,
+  updateUserDataField,
 } from '@/lib/local-data';
 
 interface FoodLogEntry {
   id: string;
   name: string;
-  kcal: number;
+  caloriesPerUnit: number;
   emoji: string;
   timestamp: number;
+  quantity?: number;
   ingredients?: Ingredient[];
 }
 
@@ -322,6 +330,26 @@ function DashboardPageClient() {
     }
   }, []);
 
+  // Load centralized user data on mount
+  useEffect(() => {
+    try {
+      const userData = getUserData() as {
+        name?: string;
+        email?: string;
+        height?: number;
+        activityLevel?: string;
+      };
+      if (userData) {
+        if (userData.name) setUsername(userData.name);
+        if (userData.email) setEmail(userData.email);
+        if (userData.height) setProfileHeight(userData.height);
+        if (userData.activityLevel) setActivityLevel(userData.activityLevel);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  }, []);
+
   // Handle scroll lock when menu is open
   useEffect(() => {
     if (showFloatingMenu) {
@@ -444,12 +472,13 @@ function DashboardPageClient() {
         console.log('[Dashboard] Today\'s food logs:', todaysFoodLogs.length, 'entries');
 
         // Convert Supabase food logs to local format
-        const formattedLogs = todaysFoodLogs.map((log: { id: string; food_name: string; kcal: number; emoji: string | null; logged_at: string; ingredients: Ingredient[] | null }) => ({
+        const formattedLogs = todaysFoodLogs.map((log: { id: string; food_name: string; kcal: number; caloriesPerUnit?: number; emoji: string | null; logged_at: string; quantity?: number; ingredients: Ingredient[] | null }) => ({
           id: log.id,
           name: log.food_name,
-          kcal: log.kcal,
+          caloriesPerUnit: log.caloriesPerUnit || log.kcal,
           emoji: log.emoji || '🍽️',
           timestamp: new Date(log.logged_at).getTime(),
+          quantity: log.quantity || 1,
           ingredients: log.ingredients || []
         }));
 
@@ -511,9 +540,10 @@ function DashboardPageClient() {
         const formattedLogs = todaysFoodLogs.map((log: any) => ({
           id: log.id,
           name: log.food_name || log.name,
-          kcal: log.kcal || log.calories,
+          caloriesPerUnit: log.caloriesPerUnit || log.kcal || log.calories,
           emoji: log.emoji || '🍽️',
           timestamp: new Date(log.logged_at || log.timestamp).getTime(),
+          quantity: log.quantity || 1,
           ingredients: log.ingredients || []
         }));
         setFoodLog(formattedLogs);
@@ -543,48 +573,56 @@ function DashboardPageClient() {
   // Handle streak updates when food is logged
   useEffect(() => {
     const handleStreakUpdate = async () => {
-      if (foodLog.length === 0) return;
+      if (foodLog.length === 0 || !plan) return;
+
+      const targetCalories = plan.targetCalories || 0;
+      if (targetCalories === 0) return;
 
       const today = new Date().toISOString().split('T')[0];
-      const lastLogDateKey = 'lastFoodLogDate';
-      const lastLogDate = localStorage.getItem(lastLogDateKey);
+      const lastStreakUpdateKey = 'lastStreakUpdateDate';
+      const lastStreakUpdate = localStorage.getItem(lastStreakUpdateKey);
 
-      // Check if this is the first log today
-      if (!lastLogDate || lastLogDate !== today) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+      // Only update streak once per day
+      if (lastStreakUpdate === today) return;
 
-        let newStreak = 1;
-        if (lastLogDate === yesterdayStr) {
-          // Logged yesterday, increment streak
-          newStreak = streak + 1;
-        }
+      try {
+        // Calculate today's total calories
+        const todayCalories = foodLog.reduce((sum, entry) => sum + (entry.caloriesPerUnit * (entry.quantity || 1)), 0);
 
-        setPrevStreak(streak);
-        setStreak(newStreak);
-        localStorage.setItem(lastLogDateKey, today);
+        // Update streak with new system
+        const updatedStreakData = (await updateStreakForDay(todayCalories, targetCalories)) as {
+          streakDates: string[];
+          currentStreak: number;
+          bestStreak: number;
+          lastUpdated: string | null;
+        };
 
-        // Update streak in database
-        try {
-          const updatedProfile = await updateStreak(newStreak);
-          setUserProfile(updatedProfile);
+        // Update UI with new streak values
+        const prevStreak = streak;
+        setStreak(updatedStreakData.currentStreak);
+        setPrevStreak(prevStreak);
 
-          // Show mascot reaction to streak increase - use current daily progress
-          const currentProgress = progress;
+        // Mark that we've updated streak for today
+        localStorage.setItem(lastStreakUpdateKey, today);
+
+        // Show mascot reaction
+        if (updatedStreakData.currentStreak > prevStreak) {
+          // Calculate current progress for message
+          const caloriesConsumed = foodLog.reduce((sum, entry) => sum + (entry.caloriesPerUnit * (entry.quantity || 1)), 0);
+          const currentProgress = targetCalories > 0 ? Math.min((caloriesConsumed / targetCalories) * 100, 100) : 0;
           const streakMessage = getStreakMessage(currentProgress);
           setMascotMessage({ text: streakMessage });
 
           const messageTimer = setTimeout(() => setMascotMessage(null), 2500);
           return () => clearTimeout(messageTimer);
-        } catch (error) {
-          console.error('Error updating streak:', error);
         }
+      } catch (error) {
+        console.error('Error updating streak:', error);
       }
     };
 
     handleStreakUpdate();
-  }, [foodLog.length]); // Only trigger when food log length changes
+  }, [foodLog.length, plan, streak]); // Trigger when food log or plan changes
 
   // Handle search
   useEffect(() => {
@@ -609,7 +647,7 @@ function DashboardPageClient() {
   const totalTarget = plan?.targetCalories || 0;
   const surplus = plan?.surplus || 0;
 
-  const caloriesConsumed = foodLog.reduce((sum, entry) => sum + entry.kcal, 0);
+  const caloriesConsumed = foodLog.reduce((sum, entry) => sum + (entry.caloriesPerUnit * (entry.quantity || 1)), 0);
   const progress = totalTarget > 0 ? Math.min((caloriesConsumed / totalTarget) * 100, 100) : 0;
 
   // Auto-complete missions based on progress and persist to localStorage
@@ -723,49 +761,37 @@ function DashboardPageClient() {
       if (!userProfile || totalTarget === 0) return;
 
       try {
+        // Get streak data from new system
+        const streakStatus = getStreakStatus() as {
+          streakDates: string[];
+          currentStreak: number;
+          bestStreak: number;
+          lastUpdated: string | null;
+        };
         const dates: string[] = [];
         const today = new Date();
 
-        // Check last 90 days
-        for (let i = 0; i < 90; i++) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - i);
-          const dateStr = date.toISOString().split('T')[0];
-
-          // Get food logs for this date
-          const dayFoodLogs = await getFoodLogsByDate(dateStr);
-          const dayCalories = dayFoodLogs.reduce((sum: number, entry: { kcal: number }) => sum + entry.kcal, 0);
-
-          // Day is completed if >= 80% of goal
-          if (dayCalories >= (totalTarget * 0.8)) {
-            dates.push(date.toDateString()); // Convert to display format for UI compatibility
-          }
+        // Convert ISO dates (YYYY-MM-DD) to display format (Day Month Date Year HH:MM:SS GMT...)
+        // This ensures compatibility with the calendar UI's toDateString() format
+        for (const isoDate of streakStatus.streakDates) {
+          const date = new Date(isoDate + 'T00:00:00Z');
+          dates.push(date.toDateString());
         }
 
         setCompletedDates(dates);
 
-        // Calculate current streak based on consecutive completed days
-        let calculatedStreak = 0;
-        for (let i = 0; i < 90; i++) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - i);
-          const dateStr = date.toDateString();
+        // Use the calculated streak from the new system
+        setCalculatedStreak(streakStatus.currentStreak);
 
-          if (dates.includes(dateStr)) {
-            calculatedStreak++;
-          } else {
-            break;
-          }
-        }
-        setCalculatedStreak(calculatedStreak);
-
+        // Also update the main streak state for dashboard display
+        setStreak(streakStatus.currentStreak);
       } catch (error) {
         console.error('Error calculating streak history:', error);
       }
     };
 
     calculateStreakHistory();
-  }, [totalTarget, userProfile?.id]); // Recalculate when user profile or target changes
+  }, [totalTarget, userProfile?.id, foodLog]); // Recalculate when user profile, target, or food logs change
 
   // Generate months from user creation date to future months
   useEffect(() => {
@@ -938,12 +964,16 @@ function DashboardPageClient() {
 
   // Add food to log
   const addFood = async (food: FoodItem) => {
+    // Ensure calories is valid (fallback to 100 if missing/0)
+    const caloriesPerUnit = food.kcal || 100;
+
     const entry: FoodLogEntry = {
       id: `${food.id}-${Date.now()}`,
       name: food.name,
-      kcal: food.kcal,
+      caloriesPerUnit,
       emoji: food.emoji,
       timestamp: Date.now(),
+      quantity: 1,
       ingredients: food.ingredients,
     };
 
@@ -958,7 +988,7 @@ function DashboardPageClient() {
       // Save to Supabase
       const savedEntry = await addFoodLog({
         name: food.name,
-        kcal: food.kcal,
+        kcal: caloriesPerUnit,
         emoji: food.emoji,
         ingredients: food.ingredients
       });
@@ -968,9 +998,10 @@ function DashboardPageClient() {
         {
           id: savedEntry.id,
           name: savedEntry.food_name,
-          kcal: savedEntry.calories,
+          caloriesPerUnit: savedEntry.caloriesPerUnit || savedEntry.calories || 100,
           emoji: savedEntry.emoji || '🍽️',
           timestamp: new Date(savedEntry.logged_at).getTime(),
+          quantity: savedEntry.quantity || 1,
           ingredients: savedEntry.ingredients || []
         },
         ...prev.filter(item => item.id !== entry.id)
@@ -1021,9 +1052,10 @@ function DashboardPageClient() {
     const entry: FoodLogEntry = {
       id: `manual-${Date.now()}`,
       name: manualName.trim() || 'Custom food',
-      kcal,
+      caloriesPerUnit: kcal || 100,
       emoji: '🍽️',
       timestamp: Date.now(),
+      quantity: 1,
     };
 
     try {
@@ -1038,7 +1070,7 @@ function DashboardPageClient() {
       // Save to Supabase
       const savedEntry = await addFoodLog({
         name: entry.name,
-        kcal: entry.kcal,
+        kcal: entry.caloriesPerUnit,
         emoji: entry.emoji,
         ingredients: []
       });
@@ -1048,9 +1080,10 @@ function DashboardPageClient() {
         {
           id: savedEntry.id,
           name: savedEntry.food_name,
-          kcal: savedEntry.kcal,
+          caloriesPerUnit: savedEntry.caloriesPerUnit || savedEntry.calories || 100,
           emoji: savedEntry.emoji || '🍽️',
           timestamp: new Date(savedEntry.logged_at).getTime(),
+          quantity: savedEntry.quantity || 1,
           ingredients: savedEntry.ingredients || []
         },
         ...prev.filter(item => item.id !== entry.id)
@@ -1111,6 +1144,25 @@ function DashboardPageClient() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Update food quantity
+  const updateQuantity = (id: string, delta: number) => {
+    setFoodLog((prev) => {
+      const updated = prev.map((entry) => {
+        if (entry.id === id) {
+          const newQuantity = Math.max(0, (entry.quantity || 1) + delta);
+          if (newQuantity === 0) {
+            // Remove item if quantity becomes 0
+            removeFood(id);
+            return null;
+          }
+          return { ...entry, quantity: newQuantity };
+        }
+        return entry;
+      }).filter(Boolean);
+      return updated as FoodLogEntry[];
+    });
   };
 
   // Update weight
@@ -1234,12 +1286,15 @@ function DashboardPageClient() {
     let hasChanged = false;
     if (field === 'height' && value !== profileHeight) {
       setProfileHeight(value);
+      updateUserDataField('height', value);
       hasChanged = true;
     } else if (field === 'goalWeight' && value !== goalWeight) {
       setGoalWeight(value);
+      updateUserDataField('goalWeight', value);
       hasChanged = true;
     } else if (field === 'activity' && editValue !== activityLevel) {
       setActivityLevel(editValue);
+      updateUserDataField('activityLevel', editValue);
       hasChanged = true;
     }
 
@@ -1452,127 +1507,149 @@ function DashboardPageClient() {
               className={`absolute inset-0 rounded-full blur-2xl ${mascotState.bgGlow}`}
             />
 
-            {/* Fixed container to prevent layout shift */}
-            <div className="relative w-56 h-56 flex items-center justify-center">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={`${viewMode}-${mascotState.level}`}
-                  initial={{ opacity: 0, scale: 0.92 }}
-                  animate={{
-                    opacity: 1,
-                    scale: 1,
-                    transition: {
-                      opacity: { duration: 0.25, ease: 'easeOut' },
-                      scale: { duration: 0.3, ease: [0.4, 0, 0.2, 1] }
-                    }
-                  }}
-                  exit={{
-                    opacity: 0,
-                    scale: 0.95,
-                    transition: {
-                      duration: 0.2,
-                      ease: 'easeIn'
-                    }
-                  }}
-                  className={`relative ${mascotState.size}`}
-                  style={{
-                    filter: mascotState.glow,
-                  }}
-                >
-                  <motion.div
-                    animate={mascotControls}
-                    className="relative w-full h-full"
-                  >
-                    {/* Breathing animation - subtle idle motion */}
+            {/* Outer container - simple flex layout */}
+            <div className="flex justify-center">
+              {/* Mascot wrapper - RELATIVE context for bubble positioning */}
+              <div className="relative inline-block">
+                {/* Mascot thought bubble - premium iOS-style interaction */}
+                <AnimatePresence mode="wait">
+                  {mascotMessage && (
                     <motion.div
+                      initial={{ opacity: 0, scale: 0.7, y: 16 }}
                       animate={{
-                        scale: [1, 1.04, 1],
+                        opacity: 1,
+                        scale: 1,
+                        y: 0,
+                        transition: {
+                          type: 'spring',
+                          stiffness: 260,
+                          damping: 18,
+                          mass: 1,
+                        },
                       }}
+                      exit={{ opacity: 0, scale: 0.7, y: 16 }}
                       transition={{
-                        duration: 2.5,
-                        repeat: Infinity,
-                        ease: 'easeInOut',
+                        type: 'spring',
+                        stiffness: 260,
+                        damping: 18,
                       }}
-                      className="w-full h-full"
+                      className="absolute bottom-full mb-[-20px] left-1/2 -translate-x-1/2 z-10"
                     >
-                      {/* Only image is clickable - inline-block for precise touch area */}
-                      <button
-                        onClick={handleMascotTap}
-                        className="inline-block cursor-pointer hover:opacity-80 transition-opacity w-full h-full focus:outline-none"
-                        type="button"
-                        aria-label="Interact with mascot"
+                      {/* Floating animation container */}
+                      <motion.div
+                        animate={{ y: [0, -3, 0] }}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 2.5,
+                          ease: 'easeInOut',
+                        }}
+                        className="bg-white/90 backdrop-blur-md px-5 py-3 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.1)] text-center text-sm leading-snug max-w-[240px] border border-gray-100"
                       >
-                        <Image
-                          src={mascotState.image}
-                          alt="Capybara mascot"
-                          fill
-                          className="object-contain"
-                          priority
-                        />
-                      </button>
+                        <p className="font-semibold text-gray-800 break-words">
+                          {mascotMessage.text}
+                        </p>
+                        {/* Premium tail - elegant pointer below bubble */}
+                        <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-white/90 rotate-45 shadow-sm" />
+                      </motion.div>
                     </motion.div>
-                  </motion.div>
-                </motion.div>
-              </AnimatePresence>
+                  )}
+                </AnimatePresence>
 
-              {/* Mascot thought bubble message - smooth cloud-like animation */}
-              <AnimatePresence>
-                {mascotMessage && (
+                {/* Mascot image container */}
+                <div className="relative w-52 h-52">
+                <AnimatePresence mode="wait">
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                    key={`${viewMode}-${mascotState.level}`}
+                    initial={{ opacity: 0, scale: 0.92 }}
                     animate={{
                       opacity: 1,
-                      scale: [1.05, 1],
-                      y: -45,
-                    }}
-                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                    transition={{
-                      duration: 0.3,
-                      ease: 'easeOut',
-                      scale: {
-                        type: 'spring',
-                        stiffness: 200,
-                        damping: 20,
-                        mass: 1,
+                      scale: 1,
+                      transition: {
+                        opacity: { duration: 0.25, ease: 'easeOut' },
+                        scale: { duration: 0.3, ease: [0.4, 0, 0.2, 1] }
                       }
                     }}
-                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30 bg-white rounded-3xl px-5 py-3 shadow-lg border border-gray-50 max-w-[240px]"
-                  >
-                    <p className="text-sm font-semibold text-gray-800 text-center leading-snug">
-                      {mascotMessage.text}
-                    </p>
-                    {/* Cloud tail - elegant pointer below bubble */}
-                    <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border-r border-b border-gray-50 transform rotate-45 shadow-sm" />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Floating temporary feedback message - below mascot */}
-              <AnimatePresence>
-                {tempMessage && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 0.7, y: 0 }}
-                    exit={{ opacity: 0, y: 5 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute z-20 flex items-center gap-1.5 whitespace-nowrap"
+                    exit={{
+                      opacity: 0,
+                      scale: 0.95,
+                      transition: {
+                        duration: 0.2,
+                        ease: 'easeIn'
+                      }
+                    }}
+                    className={`relative ${mascotState.size}`}
                     style={{
-                      bottom: '-10px',
-                      left: 0,
-                      right: 0,
-                      margin: '0 auto',
-                      width: 'fit-content',
-                      textAlign: 'center'
+                      filter: mascotState.glow,
                     }}
                   >
-                    <span className="text-base">{tempMessage.emoji}</span>
-                    <span className="text-[13px] font-medium text-gray-600">
-                      {tempMessage.text}
-                    </span>
+                    <motion.div
+                      animate={mascotControls}
+                      className="relative w-full h-full"
+                    >
+                      {/* Breathing animation - subtle idle motion */}
+                      <motion.div
+                        animate={{
+                          scale: [1, 1.04, 1],
+                        }}
+                        transition={{
+                          duration: 2.5,
+                          repeat: Infinity,
+                          ease: 'easeInOut',
+                        }}
+                        className="w-full h-full"
+                      >
+                        {/* Only image is clickable - inline-block for precise touch area */}
+                        <button
+                          onClick={handleMascotTap}
+                          className="inline-block cursor-pointer hover:opacity-80 transition-opacity w-full h-full focus:outline-none"
+                          type="button"
+                          aria-label="Interact with mascot"
+                        >
+                          <Image
+                            src={mascotState.image}
+                            alt="Capybara mascot"
+                            fill
+                            className="object-contain"
+                            priority
+                          />
+                        </button>
+                      </motion.div>
+                    </motion.div>
                   </motion.div>
-                )}
-              </AnimatePresence>
+                </AnimatePresence>
+
+                {/* End mascot image container */}
+                </div>
+
+                {/* Floating temporary feedback message - below mascot */}
+                <AnimatePresence>
+                  {tempMessage && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 0.7, y: 0 }}
+                      exit={{ opacity: 0, y: 5 }}
+                      transition={{ duration: 0.3 }}
+                      className="absolute z-20 flex items-center gap-1.5 whitespace-nowrap"
+                      style={{
+                        bottom: '-10px',
+                        left: 0,
+                        right: 0,
+                        margin: '0 auto',
+                        width: 'fit-content',
+                        textAlign: 'center'
+                      }}
+                    >
+                      <span className="text-base">{tempMessage.emoji}</span>
+                      <span className="text-[13px] font-medium text-gray-600">
+                        {tempMessage.text}
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              {/* End mascot wrapper */}
             </div>
+            {/* End outer container */}
           </div>
         </div>
 
@@ -1610,9 +1687,6 @@ function DashboardPageClient() {
               <span className="font-bold text-orange-600">{Math.round(weightProgress)}%</span>
               <span className="text-gray-500">{goalWeight} kg</span>
             </div>
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              Current: {currentWeight} kg
-            </p>
           </motion.div>
         )}
 
@@ -1828,22 +1902,61 @@ function DashboardPageClient() {
                     >
                       {/* Main entry row */}
                       <div
-                        className={`flex items-center gap-3 p-4 ${hasIngredients ? 'cursor-pointer' : ''}`}
+                        className={`flex items-center justify-between gap-3 p-4 ${hasIngredients ? 'cursor-pointer' : ''}`}
                         onClick={() => hasIngredients && toggleExpanded(entry.id)}
                       >
-                        <div className="flex-1 flex flex-col items-start">
-                          <p className="text-base font-semibold text-gray-900">{entry.name}</p>
+                        {/* Left: Food name and calories */}
+                        <div className="flex-1 flex flex-col items-start min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-base font-semibold text-gray-900 truncate">{entry.name}</p>
+                            {(entry.quantity || 1) > 1 && (
+                              <span className="text-gray-400 text-sm flex-shrink-0">
+                                x{entry.quantity || 1}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-orange-500 font-medium">
-                            {entry.kcal} kcal
+                            {((entry.caloriesPerUnit || 0) * (entry.quantity || 1))} kcal
                           </p>
                         </div>
 
-                        {/* Expand indicator for composite foods */}
-                        {hasIngredients && (
-                          <motion.div
-                            animate={{ rotate: isExpanded ? 180 : 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="w-6 h-6 flex items-center justify-center text-gray-400"
+                        {/* Right: Controls */}
+                        <div className="flex items-center gap-2 ml-auto">
+                          {/* Expand indicator for composite foods */}
+                          {hasIngredients && (
+                            <motion.div
+                              animate={{ rotate: isExpanded ? 180 : 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="w-6 h-6 flex items-center justify-center text-gray-400"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            </motion.div>
+                          )}
+
+                          {/* Decrement button - removes item if quantity = 1 */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if ((entry.quantity || 1) === 1) {
+                                removeFood(entry.id);
+                              } else {
+                                updateQuantity(entry.id, -1);
+                              }
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                            title={(entry.quantity || 1) === 1 ? "Remove item" : "Decrease quantity"}
                           >
                             <svg
                               className="w-4 h-4"
@@ -1852,36 +1965,30 @@ function DashboardPageClient() {
                               stroke="currentColor"
                               strokeWidth={2}
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M19 9l-7 7-7-7"
-                              />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
                             </svg>
-                          </motion.div>
-                        )}
+                          </button>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeFood(entry.id);
-                          }}
-                          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
+                          {/* Increment button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateQuantity(entry.id, 1);
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                            title="Increase quantity"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Ingredient breakdown (expandable) */}
@@ -1987,11 +2094,13 @@ function DashboardPageClient() {
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={() => {
                         setUsername(editValue);
+                        updateUserDataField('name', editValue);
                         setEditingField(null);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           setUsername(editValue);
+                          updateUserDataField('name', editValue);
                           setEditingField(null);
                         }
                         if (e.key === 'Escape') setEditingField(null);
@@ -2022,11 +2131,13 @@ function DashboardPageClient() {
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={() => {
                         setEmail(editValue);
+                        updateUserDataField('email', editValue);
                         setEditingField(null);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           setEmail(editValue);
+                          updateUserDataField('email', editValue);
                           setEditingField(null);
                         }
                         if (e.key === 'Escape') setEditingField(null);
@@ -2680,37 +2791,6 @@ function DashboardPageClient() {
               </motion.div>
             </div>
 
-            {/* DEV ONLY: Mock Start Date Controller */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-6 p-3 bg-purple-50 border-2 border-purple-200 rounded-xl">
-                <p className="text-[10px] font-bold text-purple-800 mb-3">
-                  🧪 DEV: Mock Start Date (temp - will be removed)
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      resetMockUserStartDate();
-                      window.location.reload();
-                    }}
-                    className="flex-1 py-2 bg-purple-200 hover:bg-purple-300 text-purple-900 text-xs font-semibold rounded-lg transition-colors"
-                  >
-                    Reset to 3mo ago
-                  </button>
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem('mockUserStartDate');
-                      window.location.reload();
-                    }}
-                    className="flex-1 py-2 bg-red-200 hover:bg-red-300 text-red-900 text-xs font-semibold rounded-lg transition-colors"
-                  >
-                    Clear mock
-                  </button>
-                </div>
-                <p className="text-[9px] text-purple-700 mt-2">
-                  Current: {new Date(localStorage.getItem('mockUserStartDate') || '').toLocaleDateString()}
-                </p>
-              </div>
-            )}
           </div>
         )}
 

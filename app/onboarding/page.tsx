@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion'
 import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
+import { setUserData } from '@/lib/local-data';
 
 // Smooth animated number display component
 function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
@@ -255,21 +256,30 @@ export default function OnboardingPage() {
     return false;
   })();
 
-  // Save onboarding data to localStorage and navigate to creating-plan
+  // Save onboarding data to centralized storage and navigate to creating-plan
   const completeOnboarding = () => {
     const onboardingData = {
       bodyType: selections[1],
       mainGoal: selections[2],
       workoutFrequency: selections[3],
       height: heightValue,
-      weight: currentWeight,
-      goalWeight: goalWeight,
+      heightUnit,
+      currentWeight,
+      weightUnit,
+      goalWeight,
       commitment: selections[7],
     };
 
     console.log('Onboarding completed, saving data:', onboardingData);
 
-    // Save to localStorage for plan result page
+    // Save to centralized user data system
+    try {
+      setUserData(onboardingData);
+    } catch (error) {
+      console.error('Error saving onboarding data:', error);
+    }
+
+    // Also save to onboardingData for backward compatibility with plan-result page
     localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
 
     // Navigate to plan result page to show summary

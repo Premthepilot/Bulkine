@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion'
 import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
-import { setUserData } from '@/lib/local-data';
+import { upsertUserProfile } from '@/lib/supabase-data';
 
 // Smooth animated number display component
 function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
@@ -256,8 +256,8 @@ export default function OnboardingPage() {
     return false;
   })();
 
-  // Save onboarding data to centralized storage and navigate to creating-plan
-  const completeOnboarding = () => {
+  // Save onboarding data to Supabase and navigate to plan-result
+  const completeOnboarding = async () => {
     const onboardingData = {
       bodyType: selections[1],
       mainGoal: selections[2],
@@ -272,18 +272,30 @@ export default function OnboardingPage() {
 
     console.log('Onboarding completed, saving data:', onboardingData);
 
-    // Save to centralized user data system
     try {
-      setUserData(onboardingData);
+      // Save to Supabase
+      await upsertUserProfile({
+        body_type: onboardingData.bodyType,
+        main_goal: onboardingData.mainGoal,
+        workout_frequency: onboardingData.workoutFrequency,
+        height: onboardingData.height,
+        height_unit: onboardingData.heightUnit,
+        current_weight: onboardingData.currentWeight,
+        weight_unit: onboardingData.weightUnit,
+        goal_weight: onboardingData.goalWeight,
+        commitment: onboardingData.commitment,
+      });
+
+      // Save onboardingData to localStorage for plan-result page (temporary)
+      localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
+
+      // Navigate to plan result page to show summary
+      router.push('/plan-result');
     } catch (error) {
       console.error('Error saving onboarding data:', error);
+      // Still navigate even if Supabase fails - data is in form state
+      router.push('/plan-result');
     }
-
-    // Also save to onboardingData for backward compatibility with plan-result page
-    localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
-
-    // Navigate to plan result page to show summary
-    router.push('/plan-result');
   };
 
   // Auto-advance for option screens

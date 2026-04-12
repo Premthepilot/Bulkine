@@ -4,32 +4,33 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import Link from "next/link";
-import { getUserProfile } from '@/lib/local-data';
+import { getUserProfile } from '@/lib/supabase-data';
 
 export default function Home() {
   const router = useRouter();
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    const checkExistingData = async () => {
+    const checkExistingSession = async () => {
       try {
-        // Check if user has existing profile data in localStorage
+        // Check if user has existing session and profile in Supabase
         const profile = await getUserProfile();
 
         if (profile) {
-          // Existing user with profile data → dashboard
+          // Existing user with profile → redirect to dashboard
           router.replace('/dashboard');
         } else {
-          // No profile data → show landing page
+          // No profile → show landing page
           setCheckingSession(false);
         }
       } catch (error) {
         console.error('Error checking user profile:', error);
+        // On error, show landing page so user can continue
         setCheckingSession(false);
       }
     };
 
-    checkExistingData();
+    checkExistingSession();
   }, [router]);
 
   if (checkingSession) {

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
 import { generatePlanFromOnboarding } from '@/lib/diet-engine';
-import { upsertUserProfile, getCurrentUser } from '@/lib/local-data';
+import { upsertUserProfile, getCurrentUser } from '@/lib/supabase-data';
 
 interface OptionStep {
   id: number;
@@ -107,16 +107,25 @@ export default function SetupPage() {
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
   const autoAdvanceTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Load onboarding data from localStorage
+  // Load onboarding data on mount
   useEffect(() => {
-    const savedData = localStorage.getItem('onboardingData');
-    if (savedData) {
-      setOnboardingData(JSON.parse(savedData));
-    } else {
-      // No onboarding data found, redirect back
-      console.warn('No onboarding data found, redirecting to onboarding');
-      router.replace('/onboarding');
-    }
+    const loadData = async () => {
+      try {
+        const savedData = localStorage.getItem('onboardingData');
+        if (savedData) {
+          setOnboardingData(JSON.parse(savedData));
+        } else {
+          console.warn('No onboarding data found, redirecting to onboarding');
+          // Small delay to ensure navigation doesn't cause issues
+          setTimeout(() => router.replace('/onboarding'), 100);
+        }
+      } catch (error) {
+        console.error('Error loading onboarding data:', error);
+        router.replace('/onboarding');
+      }
+    };
+
+    loadData();
   }, [router]);
 
   const currentStepData = STEPS.find((s) => s.id === currentStep);

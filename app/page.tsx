@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import Link from "next/link";
-import { getUserProfile } from '@/lib/supabase-data';
+import { getCurrentUser, getUserProfile } from '@/lib/supabase-data';
 
 export default function Home() {
   const router = useRouter();
@@ -13,18 +13,27 @@ export default function Home() {
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
-        // Check if user has existing session and profile in Supabase
-        const profile = await getUserProfile();
+        // Check if user is authenticated with Supabase
+        const user = await getCurrentUser();
 
-        if (profile) {
-          // Existing user with profile → redirect to dashboard
-          router.replace('/dashboard');
+        if (user) {
+          // User is logged in → check onboarding status
+          const profile = await getUserProfile();
+
+          // Check if user has completed onboarding (has target_calories set)
+          if (!profile || !profile.target_calories) {
+            // No plan → redirect to onboarding
+            router.replace('/onboarding');
+          } else {
+            // Has plan → redirect to dashboard
+            router.replace('/dashboard');
+          }
         } else {
-          // No profile → show landing page
+          // No user → show landing page
           setCheckingSession(false);
         }
       } catch (error) {
-        console.error('Error checking user profile:', error);
+        console.error('Error checking user session:', error);
         // On error, show landing page so user can continue
         setCheckingSession(false);
       }
@@ -35,8 +44,11 @@ export default function Home() {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
-        <div className="animate-pulse text-zinc-500">Loading...</div>
+      <div className="fixed inset-0 h-screen bg-surface flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-gray-200 border-t-primary-container rounded-full animate-spin" />
+          <p className="text-sm text-zinc-500">Loading...</p>
+        </div>
       </div>
     );
   }

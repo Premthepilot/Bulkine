@@ -20,10 +20,12 @@ import {
   getFoodLogsByDate,
   addFoodLog,
   deleteFoodLog,
+  updateFoodLog,
   getWeightHistory,
   addWeightEntry,
   getStreak,
   updateStreak,
+  signOut,
 } from '@/lib/supabase-data';
 
 interface FoodLogEntry {
@@ -417,6 +419,18 @@ function DashboardPageClient() {
         console.log('[Dashboard] Today\'s food logs:', foodLogs?.length || 0, 'entries');
         console.log('[Dashboard] Weight history:', weightData?.length || 0, 'entries');
 
+        // **CRITICAL: Check if user has completed onboarding**
+        // User needs onboarding if profile doesn't have target_calories set
+        // (Supabase is source of truth for onboarding completion)
+        const hasCompletedOnboarding = !!(profile && profile.target_calories);
+
+        if (!hasCompletedOnboarding) {
+          console.warn('[Dashboard] User has not completed onboarding, redirecting...');
+          setLoading(false);
+          router.replace('/onboarding');
+          return;
+        }
+
         // If no plan but user has profile, create a basic plan from DB values
         const effectivePlan = userPlan || (profile ? {
           targetCalories: profile.calories || 2500,
@@ -434,15 +448,16 @@ function DashboardPageClient() {
         setPlan(effectivePlan);
 
         // Use database values as source of truth
-        setStartingWeight(profile?.weight || onboardingData?.weight || 0);
+        setStartingWeight(profile?.weight || onboardingData?.currentWeight || 0);
         setGoalWeight(onboardingData?.goalWeight || (profile?.weight ? profile.weight + 10 : 70));
-        setStreak(profile?.streak || 1);
+        // Streak will be loaded separately from user_streaks table via getStreak()
+        setStreak(1);
 
         // Convert Supabase food logs to local format
-        const formattedLogs = (foodLogs || []).map((log: { id: string; food_name: string; kcal: number; caloriesPerUnit?: number; emoji: string | null; logged_at: string; quantity?: number; ingredients: Ingredient[] | null }) => ({
+        const formattedLogs = (foodLogs || []).map((log: { id: string; food_name: string; kcal: number; calories_per_unit?: number; emoji: string | null; logged_at: string; quantity?: number; ingredients: Ingredient[] | null }) => ({
           id: log.id,
           name: log.food_name,
-          caloriesPerUnit: log.caloriesPerUnit || log.kcal,
+          caloriesPerUnit: log.calories_per_unit || log.kcal || 100,
           emoji: log.emoji || '🍽️',
           timestamp: new Date(log.logged_at).getTime(),
           quantity: log.quantity || 1,
@@ -499,7 +514,7 @@ function DashboardPageClient() {
         const formattedLogs = todaysFoodLogs.map((log: any) => ({
           id: log.id,
           name: log.food_name || log.name,
-          caloriesPerUnit: log.caloriesPerUnit || log.kcal || log.calories,
+          caloriesPerUnit: log.calories_per_unit || log.kcal || log.calories || 100,
           emoji: log.emoji || '🍽️',
           timestamp: new Date(log.logged_at || log.timestamp).getTime(),
           quantity: log.quantity || 1,
@@ -566,7 +581,7 @@ function DashboardPageClient() {
     };
 
     handleStreakUpdate();
-  }, [foodLog.length, plan, streak]); // Trigger when food log or plan changes
+  }, [foodLog.length, plan]); // Trigger when food log or plan changes
 
   // Handle search
   useEffect(() => {
@@ -673,7 +688,7 @@ function DashboardPageClient() {
     // Persist to localStorage
     localStorage.setItem('dailyMissions', JSON.stringify(updatedDaily));
     localStorage.setItem('weeklyMissions', JSON.stringify(updatedWeekly));
-  }, [foodLog.length, streak, progress, daysActive, dailyMissions, weeklyMissions]);
+  }, [foodLog.length, streak, progress, daysActive]);
 
   // Get current weight (latest entry or starting weight)
   const currentWeight = weightHistory.length > 0
@@ -931,7 +946,7 @@ function DashboardPageClient() {
         {
           id: savedEntry.id,
           name: savedEntry.food_name,
-          caloriesPerUnit: savedEntry.caloriesPerUnit || savedEntry.calories || 100,
+          caloriesPerUnit: savedEntry.calories_per_unit || savedEntry.calories || 100,
           emoji: savedEntry.emoji || '🍽️',
           timestamp: new Date(savedEntry.logged_at).getTime(),
           quantity: savedEntry.quantity || 1,
@@ -1014,7 +1029,7 @@ function DashboardPageClient() {
         {
           id: savedEntry.id,
           name: savedEntry.food_name,
-          caloriesPerUnit: savedEntry.caloriesPerUnit || savedEntry.calories || 100,
+          caloriesPerUnit: savedEntry.calories_per_unit || savedEntry.calories || 100,
           emoji: savedEntry.emoji || '🍽️',
           timestamp: new Date(savedEntry.logged_at).getTime(),
           quantity: savedEntry.quantity || 1,
@@ -1081,22 +1096,55 @@ function DashboardPageClient() {
   };
 
   // Update food quantity
-  const updateQuantity = (id: string, delta: number) => {
-    setFoodLog((prev) => {
-      const updated = prev.map((entry) => {
-        if (entry.id === id) {
-          const newQuantity = Math.max(0, (entry.quantity || 1) + delta);
-          if (newQuantity === 0) {
-            // Remove item if quantity becomes 0
-            removeFood(id);
-            return null;
-          }
-          return { ...entry, quantity: newQuantity };
-        }
-        return entry;
-      }).filter(Boolean);
-      return updated as FoodLogEntry[];
-    });
+  const updateQuantity = async (id: string, delta: number) => {
+    const entry = foodLog.find(item => item.id === id);
+    if (!entry) return;
+
+    const newQuantity = Math.max(0, (entry.quantity || 1) + delta);
+
+    // Remove item if quantity becomes 0
+    if (newQuantity === 0) {
+      await removeFood(id);
+      return;
+    }
+
+    const originalEntry = { ...entry };
+
+    try {
+      setSaving(true);
+
+      // Optimistic update
+      setFoodLog((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, quantity: newQuantity } : item
+        )
+      );
+
+      // Update in database
+      await updateFoodLog(id, {
+        quantity: newQuantity,
+        calories_per_unit: entry.caloriesPerUnit
+      });
+
+      // Refresh user profile to get updated calories
+      const updatedProfile = await getUserProfile();
+      if (updatedProfile) {
+        setUserProfile(updatedProfile);
+      }
+
+    } catch (error) {
+      console.error('Error updating food quantity:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update food quantity';
+      setError(errorMessage);
+      // Revert optimistic update
+      setFoodLog((prev) =>
+        prev.map((item) =>
+          item.id === id ? originalEntry : item
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Update weight
@@ -1159,17 +1207,23 @@ function DashboardPageClient() {
   };
 
   // Logout handler
-  const handleLogout = () => {
-    console.log('Logout clicked');
+  const handleLogout = async () => {
     try {
       setLoggingOut(true);
 
-      // Close modal and navigate
+      // Sign out from Supabase
+      await signOut();
+
+      // Clear localStorage
+      localStorage.removeItem('userPlan');
+      localStorage.removeItem('onboardingData');
+
+      // Close modal and redirect to home
       setShowLogoutConfirm(false);
-      console.log('Navigating to home');
-      router.replace('/');
+      router.replace('/login');
     } catch (error) {
       console.error('Error during logout:', error);
+      setError('Failed to log out. Please try again.');
       setLoggingOut(false);
       setShowLogoutConfirm(false);
     }

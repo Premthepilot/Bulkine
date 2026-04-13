@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion'
 import { useRouter } from 'next/navigation';
 import ProgressBar from '../components/onboarding/ProgressBar';
 import SelectableCard from '../components/onboarding/SelectableCard';
-import { upsertUserProfile } from '@/lib/supabase-data';
+import { getCurrentUser, getUserProfile } from '@/lib/supabase-data';
 
 // Smooth animated number display component
 function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
@@ -174,6 +174,7 @@ const getPageTransition = (direction: number) => ({
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
   const [direction, setDirection] = useState(1);
   const [selections, setSelections] = useState<Record<number, string>>({});
@@ -184,6 +185,50 @@ export default function OnboardingPage() {
   const [goalWeight, setGoalWeight] = useState(60);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const autoAdvanceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Check if user already has completed onboarding
+  // If they have, redirect to dashboard
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      try {
+        const user = await getCurrentUser();
+        if (!user) {
+          // Not logged in, stay on onboarding
+          setChecking(false);
+          return;
+        }
+
+        const profile = await getUserProfile();
+        // If user has target_calories set, they've already completed onboarding
+        if (profile && profile.target_calories) {
+          // Redirect without showing loading screen (just go to dashboard)
+          router.replace('/dashboard');
+          return;
+        }
+
+        // User needs to complete onboarding, stop blocking
+        setChecking(false);
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+        // On error, let user proceed with onboarding
+        setChecking(false);
+      }
+    };
+
+    checkOnboardingStatus();
+  }, [router]);
+
+  // Block all UI rendering until redirect check is complete
+  if (checking) {
+    return (
+      <div className="fixed inset-0 h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-gray-200 border-t-orange-500 rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Height conversion functions
   const cmToFeetInches = (cm: number) => {
@@ -256,7 +301,7 @@ export default function OnboardingPage() {
     return false;
   })();
 
-  // Save onboarding data to Supabase and navigate to plan-result
+  // Save onboarding data to localStorage and navigate to plan-result
   const completeOnboarding = async () => {
     const onboardingData = {
       bodyType: selections[1],
@@ -273,27 +318,16 @@ export default function OnboardingPage() {
     console.log('Onboarding completed, saving data:', onboardingData);
 
     try {
-      // Save to Supabase
-      await upsertUserProfile({
-        body_type: onboardingData.bodyType,
-        main_goal: onboardingData.mainGoal,
-        workout_frequency: onboardingData.workoutFrequency,
-        height: onboardingData.height,
-        height_unit: onboardingData.heightUnit,
-        current_weight: onboardingData.currentWeight,
-        weight_unit: onboardingData.weightUnit,
-        goal_weight: onboardingData.goalWeight,
-        commitment: onboardingData.commitment,
-      });
-
-      // Save onboardingData to localStorage for plan-result page (temporary)
+      // Save onboardingData to localStorage only
+      // (Will be used to generate meal plan and for display purposes)
       localStorage.setItem('onboardingData', JSON.stringify(onboardingData));
+      console.log('Onboarding data saved to localStorage');
 
       // Navigate to plan result page to show summary
       router.push('/plan-result');
     } catch (error) {
       console.error('Error saving onboarding data:', error);
-      // Still navigate even if Supabase fails - data is in form state
+      // Still navigate even if localStorage fails - data is in form state
       router.push('/plan-result');
     }
   };

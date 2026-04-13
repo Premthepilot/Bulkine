@@ -91,7 +91,9 @@ interface OnboardingData {
   mainGoal: string;
   workoutFrequency: string;
   height: number;
-  weight: number;
+  heightUnit: string;
+  currentWeight: number;
+  weightUnit: string;
   goalWeight: number;
   commitment: string;
 }
@@ -159,13 +161,13 @@ export default function SetupPage() {
         return;
       }
 
-      // Combine all data
+      // Combine all data (uses 'weight' for plan generation)
       const completeData = {
         bodyType: onboardingData.bodyType,
         mainGoal: onboardingData.mainGoal,
         workoutFrequency: onboardingData.workoutFrequency,
         height: onboardingData.height,
-        weight: onboardingData.weight,
+        weight: onboardingData.currentWeight,
         goalWeight: onboardingData.goalWeight,
         commitment: onboardingData.commitment,
         appetite: selections[1],
@@ -178,10 +180,28 @@ export default function SetupPage() {
 
       // Validate required fields
       const requiredFields = ['bodyType', 'mainGoal', 'height', 'weight', 'goalWeight'];
-      const missingFields = requiredFields.filter(field => completeData[field as keyof typeof completeData] === undefined);
+      const missingFields = requiredFields.filter(field => {
+        const value = completeData[field as keyof typeof completeData];
+        return value === undefined || value === null || value === '';
+      });
       if (missingFields.length > 0) {
         console.error('[SetupPage] Missing required fields:', missingFields);
         setSaveError(`Missing required data: ${missingFields.join(', ')}`);
+        setIsSaving(false);
+        return;
+      }
+
+      // Check data types
+      if (typeof completeData.weight !== 'number' || completeData.weight <= 0) {
+        console.error('[SetupPage] Invalid weight:', completeData.weight);
+        setSaveError('Invalid weight. Please ensure weight is a positive number.');
+        setIsSaving(false);
+        return;
+      }
+
+      if (typeof completeData.height !== 'number' || completeData.height <= 0) {
+        console.error('[SetupPage] Invalid height:', completeData.height);
+        setSaveError('Invalid height. Please ensure height is a positive number.');
         setIsSaving(false);
         return;
       }
@@ -190,17 +210,32 @@ export default function SetupPage() {
       const plan = generatePlanFromOnboarding(completeData);
       console.log('[SetupPage] Generated plan:', JSON.stringify(plan, null, 2));
 
-      // Prepare profile data for Supabase
-      // users_data table only has columns: user_id, weight, calories, streak
+      if (!plan || !plan.targetCalories) {
+        console.error('[SetupPage] Plan generation failed or missing targetCalories');
+        setSaveError('Failed to generate meal plan. Please try again.');
+        setIsSaving(false);
+        return;
+      }
+
+      // Prepare profile data for Supabase with correct column names
       const profileData = {
-        weight: completeData.weight,
-        calories: plan.targetCalories || null,
-        streak: 1
+        body_type: completeData.bodyType,
+        main_goal: completeData.mainGoal,
+        workout_frequency: completeData.workoutFrequency,
+        height: completeData.height,
+        current_weight: completeData.weight,
+        goal_weight: completeData.goalWeight,
+        appetite_level: completeData.appetite,
+        meals_per_day: completeData.mealsPerDay,
+        diet_preference: completeData.dietPreference,
+        workout_time: completeData.workoutTime,
+        commitment_level: completeData.commitment,
+        target_calories: plan.targetCalories
       };
 
       console.log('[SetupPage] Profile data for Supabase:', JSON.stringify(profileData, null, 2));
 
-      // Save to Supabase
+      // Save to Supabase (only weight)
       const result = await upsertUserProfile(profileData);
       console.log('[SetupPage] User profile saved successfully:', result);
 
@@ -215,7 +250,14 @@ export default function SetupPage() {
       router.replace('/creating-plan');
     } catch (error) {
       console.error('[SetupPage] Error saving profile:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Better error logging
+      if (error instanceof Error) {
+        console.error('[SetupPage] Error message:', error.message);
+        console.error('[SetupPage] Error stack:', error.stack);
+      } else if (typeof error === 'object' && error !== null) {
+        console.error('[SetupPage] Error object:', JSON.stringify(error, null, 2));
+      }
+      const errorMessage = error instanceof Error ? error.message : (typeof error === 'string' ? error : 'Unknown error occurred');
       setSaveError(errorMessage);
       setIsSaving(false);
     }

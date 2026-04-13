@@ -9,7 +9,9 @@ interface OnboardingData {
   mainGoal: string;
   workoutFrequency: string;
   height: number;
-  weight: number;
+  heightUnit: string;
+  currentWeight: number;
+  weightUnit: string;
   goalWeight: number;
   commitment: string;
 }
@@ -25,7 +27,7 @@ export default function PlanResultPage() {
     if (savedData) {
       const data = JSON.parse(savedData) as OnboardingData;
       setOnboardingData(data);
-      setAnimatedWeight(data.weight);
+      setAnimatedWeight(data.currentWeight);
     } else {
       // No data found, redirect back to onboarding
       console.warn('No onboarding data found, redirecting to onboarding');
@@ -37,7 +39,7 @@ export default function PlanResultPage() {
   useEffect(() => {
     if (!onboardingData) return;
 
-    const currentWeight = onboardingData.weight;
+    const currentWeight = onboardingData.currentWeight;
     const goalWeight = onboardingData.goalWeight;
     const weightDiff = goalWeight - currentWeight;
     const duration = 800;
@@ -77,7 +79,7 @@ export default function PlanResultPage() {
     );
   }
 
-  const weightGain = onboardingData.goalWeight - onboardingData.weight;
+  const weightGain = onboardingData.goalWeight - onboardingData.currentWeight;
   const estimatedMonths = Math.max(1, Math.ceil(weightGain / 3));
 
   return (
@@ -115,7 +117,7 @@ export default function PlanResultPage() {
                 transition={{ delay: 0.8, duration: 0.4 }}
                 className="text-xs text-gray-400 mt-1"
               >
-                From {onboardingData.weight} kg
+                From {onboardingData.currentWeight} kg
               </motion.div>
             </motion.div>
           </div>
@@ -157,7 +159,7 @@ export default function PlanResultPage() {
           >
             <div className="bg-gray-50 rounded-xl p-4 text-center">
               <p className="text-sm text-gray-500">Current</p>
-              <p className="text-xl font-bold text-gray-900">{onboardingData.weight} kg</p>
+              <p className="text-xl font-bold text-gray-900">{onboardingData.currentWeight} kg</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-4 text-center">
               <p className="text-sm text-gray-500">Goal</p>

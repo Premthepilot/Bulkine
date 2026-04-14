@@ -8,6 +8,8 @@ import dynamic from 'next/dynamic';
 import type { WeeklyPlanOutput } from '@/lib/diet-engine';
 import { searchFoods, type FoodItem, type Ingredient } from '@/lib/food-database';
 import { useAuthProtection } from '@/lib/use-auth-protection';
+import { ErrorDisplay } from '@/components/ErrorDisplay';
+import { SmallLoadingState } from '@/components/SmallLoadingState';
 import {
   getCurrentUser,
   migrateOldLocalStorage,
@@ -195,6 +197,7 @@ function DashboardPageClient() {
   const [manualCalories, setManualCalories] = useState('');
   const [manualName, setManualName] = useState('');
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
+  const [foodError, setFoodError] = useState<string | null>(null);
   const [streak, setStreak] = useState(0);
   const [prevStreak, setPrevStreak] = useState(0);
   const [viewMode, setViewMode] = useState<'daily' | 'overall'>('daily');
@@ -223,6 +226,7 @@ function DashboardPageClient() {
   // Supabase-specific state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
 
@@ -976,7 +980,7 @@ function DashboardPageClient() {
     } catch (error) {
       console.error('Error adding food:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to add food entry';
-      setError(errorMessage);
+      setFoodError(errorMessage);
       // Revert optimistic update
       setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
     } finally {
@@ -1059,7 +1063,7 @@ function DashboardPageClient() {
     } catch (error) {
       console.error('Error adding manual entry:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to add manual entry';
-      setError(errorMessage);
+      setFoodError(errorMessage);
       // Revert optimistic update
       setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
     } finally {
@@ -1343,17 +1347,17 @@ function DashboardPageClient() {
         {/* Error State */}
         {error && !loading && (
           <div className="flex-1 flex items-center justify-center p-6">
-            <div className="text-center">
-              <div className="text-red-500 text-4xl mb-4">⚠️</div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Oops! Something went wrong</h2>
-              <p className="text-gray-600 mb-4">{error}</p>
-              <button
-                onClick={() => window.location.reload()}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg"
-              >
-                Try Again
-              </button>
-            </div>
+            <ErrorDisplay
+              title="Failed to load dashboard"
+              message={error}
+              onRetry={() => {
+                setIsRetrying(true);
+                setError(null);
+                window.location.reload();
+              }}
+              isRetrying={isRetrying}
+              icon="⚠️"
+            />
           </div>
         )}
 

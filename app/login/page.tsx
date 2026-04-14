@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn, signUp, getCurrentUser } from '@/lib/supabase-data';
+import { signIn, signUp, getCurrentUser, ensureUserProfile } from '@/lib/supabase-data';
 import { createClient } from '@supabase/supabase-js';
 
 type AuthMode = 'login' | 'signup';
@@ -18,13 +18,36 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Check if user is already logged in
+  // Check if user is already logged in or just completed OAuth
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const user = await getCurrentUser();
         if (user) {
-          router.replace('/dashboard');
+          // User is authenticated - ensure profile exists and redirect
+          try {
+            const profile = await ensureUserProfile();
+
+            // Check onboarding status
+            // Profile with target_calories = onboarding complete
+            const hasCompletedOnboarding = !!(profile && profile.target_calories);
+            const userPlan = localStorage.getItem('userPlan');
+
+            if (hasCompletedOnboarding && userPlan) {
+              // Returning user with profile AND plan → Dashboard
+              router.replace('/dashboard');
+            } else if (hasCompletedOnboarding) {
+              // Returning user with profile but NO plan → Setup/Plan creation
+              router.replace('/setup');
+            } else {
+              // New user (no target_calories set) → Onboarding
+              router.replace('/onboarding');
+            }
+          } catch (profileErr) {
+            console.error('Error checking profile during auth:', profileErr);
+            // If profile check fails, go to dashboard and let dashboard handle it
+            router.replace('/dashboard');
+          }
         }
       } catch (err) {
         console.error('Error checking auth:', err);
@@ -48,8 +71,27 @@ export default function LoginPage() {
     }
 
     try {
+      // Sign in user
       await signIn(email, password);
-      router.push('/');
+
+      // Ensure user profile exists (create if missing)
+      const profile = await ensureUserProfile();
+
+      // Check if user has completed onboarding
+      // Profile with target_calories = onboarding complete
+      const hasCompletedOnboarding = !!(profile && profile.target_calories);
+      const userPlan = localStorage.getItem('userPlan');
+
+      if (hasCompletedOnboarding && userPlan) {
+        // Returning user with profile AND plan → Dashboard
+        router.push('/dashboard');
+      } else if (hasCompletedOnboarding) {
+        // Returning user with profile but NO plan → Setup/Plan creation
+        router.push('/setup');
+      } else {
+        // New user (no target_calories set) → Onboarding
+        router.push('/onboarding');
+      }
     } catch (err: any) {
       console.error('Login error:', err);
       if (err.message?.includes('Invalid login credentials')) {
@@ -95,12 +137,18 @@ export default function LoginPage() {
     }
 
     try {
+      // Sign up user
       await signUp(email, password);
+
+      // Ensure user profile exists (create if missing)
+      await ensureUserProfile();
+
       setSuccess(true);
       setEmail('');
       setPassword('');
       setConfirmPassword('');
 
+      // Redirect to onboarding after signup (all new users need onboarding)
       setTimeout(() => {
         router.push('/onboarding');
       }, 2000);
@@ -133,7 +181,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `window.location.origin`,
+          redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/login`,
         },
       });
 

@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic';
 import type { WeeklyPlanOutput } from '@/lib/diet-engine';
 import { searchFoods, type FoodItem, type Ingredient } from '@/lib/food-database';
 import { useAuthProtection } from '@/lib/use-auth-protection';
+import { createRequestLimiter } from '@/lib/request-limiter';
 import { ErrorDisplay } from '@/components/ErrorDisplay';
 import { SmallLoadingState } from '@/components/SmallLoadingState';
 import {
@@ -178,6 +179,11 @@ function DashboardPageClient() {
 
   // Protect route: redirect if not authenticated or has no profile
   const { isLoading: isAuthLoading } = useAuthProtection({ requireProfile: true });
+
+  // Rate limiters for user actions (minimum 1 second between requests)
+  const foodLimiter = useRef(createRequestLimiter(1000)).current
+  const quantityLimiter = useRef(createRequestLimiter(1000)).current
+  const weightLimiter = useRef(createRequestLimiter(1000)).current
 
   const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -920,6 +926,13 @@ function DashboardPageClient() {
 
   // Add food to log
   const addFood = async (food: FoodItem) => {
+    // Check if request can be executed
+    if (!foodLimiter.canExecute()) {
+      const waitTime = Math.ceil(foodLimiter.getWaitTime() / 100) * 100
+      setFoodError(`Please wait ${waitTime}ms before adding another item`);
+      return;
+    }
+
     // Ensure calories is valid (fallback to 100 if missing/0)
     const caloriesPerUnit = food.kcal || 100;
 
@@ -934,21 +947,32 @@ function DashboardPageClient() {
     };
 
     try {
+      // Show that request is being processed
       setSaving(true);
+      setFoodError(null);
 
       // Optimistic update
       setFoodLog((prev) => [entry, ...prev]);
       setSearchQuery('');
       setShowSearch(false);
 
-      // Save to Supabase
-      const savedEntry = await addFoodLog({
-        name: food.name,
-        calories_per_unit: caloriesPerUnit,
-        quantity: 1,
-        emoji: food.emoji,
-        ingredients: food.ingredients
+      // Execute with rate limiting - prevents duplicate calls
+      const savedEntry = await foodLimiter.execute(async () => {
+        return await addFoodLog({
+          name: food.name,
+          calories_per_unit: caloriesPerUnit,
+          quantity: 1,
+          emoji: food.emoji,
+          ingredients: food.ingredients
+        });
       });
+
+      // Handle rate limit rejection
+      if (!savedEntry) {
+        setFoodError('Request already in progress. Please wait.');
+        setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
+        return;
+      }
 
       // Replace optimistic update with real entry from database
       setFoodLog((prev) => [
@@ -1003,6 +1027,13 @@ function DashboardPageClient() {
 
   // Add manual entry
   const addManualEntry = async () => {
+    // Rate limit manual entries (same as addFood)
+    if (!foodLimiter.canExecute()) {
+      const waitTime = Math.ceil(foodLimiter.getWaitTime() / 100) * 100
+      setFoodError(`Please wait ${waitTime}ms before adding another item`);
+      return;
+    }
+
     const kcal = parseInt(manualCalories);
     if (isNaN(kcal) || kcal <= 0) return;
 
@@ -1017,6 +1048,7 @@ function DashboardPageClient() {
 
     try {
       setSaving(true);
+      setFoodError(null);
 
       // Optimistic update
       setFoodLog((prev) => [entry, ...prev]);
@@ -1024,14 +1056,23 @@ function DashboardPageClient() {
       setManualName('');
       setShowManualEntry(false);
 
-      // Save to Supabase
-      const savedEntry = await addFoodLog({
-        name: entry.name,
-        calories_per_unit: entry.caloriesPerUnit,
-        quantity: 1,
-        emoji: entry.emoji,
-        ingredients: []
+      // Execute with rate limiting - prevents duplicate calls
+      const savedEntry = await foodLimiter.execute(async () => {
+        return await addFoodLog({
+          name: entry.name,
+          calories_per_unit: entry.caloriesPerUnit,
+          quantity: 1,
+          emoji: entry.emoji,
+          ingredients: []
+        });
       });
+
+      // Handle rate limit rejection
+      if (!savedEntry) {
+        setFoodError('Request already in progress. Please wait.');
+        setFoodLog((prev) => prev.filter(item => item.id !== entry.id));
+        return;
+      }
 
       // Replace optimistic update with real entry from database
       setFoodLog((prev) => [
@@ -1106,6 +1147,13 @@ function DashboardPageClient() {
 
   // Update food quantity
   const updateQuantity = async (id: string, delta: number) => {
+    // Rate limit quantity updates
+    if (!quantityLimiter.canExecute()) {
+      const waitTime = Math.ceil(quantityLimiter.getWaitTime() / 100) * 100
+      setError(`Please wait ${waitTime}ms before making another change`);
+      return;
+    }
+
     const entry = foodLog.find(item => item.id === id);
     if (!entry) return;
 
@@ -1121,6 +1169,7 @@ function DashboardPageClient() {
 
     try {
       setSaving(true);
+      setError(null);
 
       // Optimistic update
       setFoodLog((prev) =>
@@ -1129,11 +1178,24 @@ function DashboardPageClient() {
         )
       );
 
-      // Update in database
-      await updateFoodLog(id, {
-        quantity: newQuantity,
-        calories_per_unit: entry.caloriesPerUnit
+      // Execute with rate limiting - prevents duplicate concurrent updates
+      const result = await quantityLimiter.execute(async () => {
+        return await updateFoodLog(id, {
+          quantity: newQuantity,
+          calories_per_unit: entry.caloriesPerUnit
+        });
       });
+
+      // Handle rate limit rejection
+      if (!result) {
+        setError('Request already in progress. Please wait.');
+        setFoodLog((prev) =>
+          prev.map((item) =>
+            item.id === id ? originalEntry : item
+          )
+        );
+        return;
+      }
 
       // Refresh user profile to get updated calories
       const updatedProfile = await getUserProfile();
@@ -1158,6 +1220,13 @@ function DashboardPageClient() {
 
   // Update weight
   const updateWeight = async () => {
+    // Rate limit weight updates
+    if (!weightLimiter.canExecute()) {
+      const waitTime = Math.ceil(weightLimiter.getWaitTime() / 100) * 100
+      setError(`Please wait ${waitTime}ms before updating weight again`);
+      return;
+    }
+
     const weight = parseFloat(newWeight);
     if (isNaN(weight) || weight <= 0) return;
 
@@ -1168,6 +1237,7 @@ function DashboardPageClient() {
 
     try {
       setSaving(true);
+      setError(null);
 
       // Optimistic update
       const updatedHistory = [...weightHistory, newEntry];
@@ -1175,8 +1245,18 @@ function DashboardPageClient() {
       setNewWeight('');
       setShowWeightModal(false);
 
-      // Save to Supabase
-      await addWeightEntry(weight);
+      // Execute with rate limiting - prevents duplicate concurrent requests
+      const result = await weightLimiter.execute(async () => {
+        return await addWeightEntry(weight);
+      });
+
+      // Handle rate limit rejection
+      if (!result) {
+        setError('Request already in progress. Please wait.');
+        setWeightHistory(weightHistory);
+        setShowWeightModal(true);
+        return;
+      }
 
       // Get fresh weight history to ensure consistency
       const freshWeightHistory = await getWeightHistory();

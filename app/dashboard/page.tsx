@@ -7,6 +7,7 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import type { WeeklyPlanOutput } from '@/lib/diet-engine';
 import { searchFoods, type FoodItem, type Ingredient } from '@/lib/food-database';
+import { useAuthProtection } from '@/lib/use-auth-protection';
 import {
   getCurrentUser,
   migrateOldLocalStorage,
@@ -172,6 +173,10 @@ function useScrollLinkedProfileHeader() {
 
 function DashboardPageClient() {
   const router = useRouter();
+
+  // Protect route: redirect if not authenticated or has no profile
+  const { isLoading: isAuthLoading } = useAuthProtection({ requireProfile: true });
+
   const [plan, setPlan] = useState<WeeklyPlanOutput | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -1303,13 +1308,22 @@ function DashboardPageClient() {
   const mascotState = getMascotState();
 
   return (
-    <motion.div
-      className="min-h-screen bg-gray-100 flex items-center justify-center"
-      initial={{ x: 100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.35, ease: "easeInOut" }}
-    >
-      <div className="w-full max-w-sm min-h-screen bg-[#F8F9FA] flex flex-col overflow-y-auto">
+    <>
+      {isAuthLoading ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-100">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Verifying your account...</p>
+          </div>
+        </div>
+      ) : (
+        <motion.div
+          className="min-h-screen bg-gray-100 flex items-center justify-center"
+          initial={{ x: 100, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: 0.35, ease: "easeInOut" }}
+        >
+          <div className="w-full max-w-sm min-h-screen bg-[#F8F9FA] flex flex-col overflow-y-auto">
         {/* Top Gradient Overlay - Soft cloudy fade */}
         <div className="fixed top-0 left-0 right-0 h-16 z-30 bg-gradient-to-b from-white/80 to-transparent pointer-events-none" />
 
@@ -3188,6 +3202,8 @@ function DashboardPageClient() {
         )}
       </div>
     </motion.div>
+      )}
+    </>
   );
 }
 
